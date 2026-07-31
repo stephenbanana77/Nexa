@@ -1,6 +1,7 @@
 """DuckDB query engine for CSV analysis."""
 import duckdb
 import pandas as pd
+import chardet
 from pathlib import Path
 from utils.config import settings
 
@@ -12,9 +13,15 @@ class DuckDBEngine:
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
-        self.conn.execute(
-            f"CREATE TABLE {safe_name} AS SELECT * FROM read_csv_auto('{file_path}')"
-        )
+        # Use pandas to handle encoding, then register with DuckDB
+        with open(file_path, "rb") as f:
+            raw = f.read(200000)
+        encoding = chardet.detect(raw)["encoding"] or "utf-8"
+        try:
+            df = pd.read_csv(file_path, encoding=encoding)
+        except Exception:
+            df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
+        self.conn.register(safe_name, df)
 
     def register_excel(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")

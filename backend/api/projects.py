@@ -106,7 +106,12 @@ async def upload_dataset(
         f.write(contents)
 
     if ext == ".csv":
-        df = pd.read_csv(file_path)
+        # Auto-detect encoding (Kaggle datasets often use non-UTF-8)
+        import chardet
+        with open(file_path, "rb") as raw:
+            result = chardet.detect(raw.read(100000))
+        encoding = result["encoding"] or "utf-8"
+        df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
     else:
         df = pd.read_excel(file_path)
 
