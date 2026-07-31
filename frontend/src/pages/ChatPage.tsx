@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button, Input, message } from "antd";
 import { SendOutlined, SaveOutlined, BookOutlined } from "@ant-design/icons";
+import ReactMarkdown from "react-markdown";
 import api from "../api/client";
 import "./ChatPage.css";
 
@@ -215,7 +216,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
             <div key={i} className="chat-message-ai">
               <div className="avatar">N</div>
               <div className="content">
-                <div dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, "<br/>") }} />
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
                 {msg.sql && (
                   <pre
                     style={{

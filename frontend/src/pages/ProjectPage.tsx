@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Tabs, Upload, Button, Table, message, Spin } from "antd";
+import { Tabs, Upload, Button, Table, Select, message, Spin } from "antd";
 import { UploadOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
@@ -42,11 +42,19 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [project, setProject] = useState<ProjectInfo | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
 
   useEffect(() => {
     api.get(`/api/projects/${projectId}`).then(({ data }) => setProject(data)).catch(() => navigate("/"));
+    // Load existing datasets
+    api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
+      if (Array.isArray(data)) {
+        setDatasets(data);
+        if (data.length > 0) setSelectedDatasetId(data[0].id);
+      }
+    }).catch(() => {});
   }, [projectId]);
 
   const handleUpload = async (file: File) => {
@@ -56,6 +64,7 @@ export default function ProjectPage() {
     try {
       const { data } = await api.post(`/api/datasets/upload?project_id=${projectId}`, formData);
       setDatasets((prev) => [data, ...prev]);
+      setSelectedDatasetId(data.id);
       if (data.preview) setPreviewData(data.preview);
       message.success(`Uploaded: ${file.name}`);
     } catch (err: any) {
@@ -105,7 +114,7 @@ export default function ProjectPage() {
     );
   }
 
-  const latestDataset = datasets[0];
+  const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d0d0d" }}>
@@ -122,25 +131,39 @@ export default function ProjectPage() {
               <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
                 <Button icon={<UploadOutlined />} loading={uploading} size="large" style={{ marginBottom: 20 }}>Upload CSV / Excel</Button>
               </Upload>
-              {latestDataset && <>
+              {datasets.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <span style={{ color: "#888", fontSize: 12, marginRight: 8 }}>Dataset:</span>
+                  <Select
+                    value={selectedDatasetId}
+                    onChange={(val) => {
+                      setSelectedDatasetId(val);
+                      setPreviewData(null);
+                    }}
+                    style={{ width: 280 }}
+                    options={datasets.map((d) => ({ label: d.name, value: d.id }))}
+                  />
+                </div>
+              )}
+              {selectedDataset && <>
                 <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-                  {[{ label: "Dataset", value: latestDataset.name }, { label: "Rows", value: latestDataset.row_count.toLocaleString() }, { label: "Columns", value: latestDataset.column_count }].map((m) => (
+                  {[{ label: "Dataset", value: selectedDataset.name }, { label: "Rows", value: selectedDataset.row_count.toLocaleString() }, { label: "Columns", value: selectedDataset.column_count }].map((m) => (
                     <div key={m.label} style={{ background: "#1f1f1f", borderRadius: 8, padding: "12px 18px", flex: 1 }}>
                       <div style={{ fontSize: 11, color: "#666" }}>{m.label}</div>
                       <div style={{ fontSize: 15, fontWeight: 500, color: "#ddd" }}>{m.value}</div>
                     </div>))}
                 </div>
-                {latestDataset.schema_info && <>
+                {selectedDataset.schema_info && <>
                   <div style={{ color: "#aaa", fontSize: 13, marginBottom: 8 }}>Schema</div>
-                  <Table columns={schemaColumns} dataSource={latestDataset.schema_info.map((s, i) => ({ ...s, key: i }))} pagination={false} size="small" />
+                  <Table columns={schemaColumns} dataSource={selectedDataset.schema_info.map((s, i) => ({ ...s, key: i }))} pagination={false} size="small" />
                 </>}
                 {previewData && <>
-                  <div style={{ color: "#aaa", fontSize: 13, margin: "20px 0 8px" }}>Preview (first 1,000 of {latestDataset.row_count.toLocaleString()} rows)</div>
+                  <div style={{ color: "#aaa", fontSize: 13, margin: "20px 0 8px" }}>Preview (first 1,000 of {selectedDataset.row_count.toLocaleString()} rows)</div>
                   <div className="ag-theme-alpine-dark" style={{ height: 400, width: "100%", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
                     <AgGridReact columnDefs={gridColumns} rowData={gridRows} rowHeight={32} headerHeight={36} suppressCellFocus />
                   </div>
                 </>}
-                {!previewData && latestDataset.schema_info && <Button onClick={() => loadPreview(latestDataset.id)} style={{ marginTop: 12 }}>Load Data Preview</Button>}
+                {!previewData && selectedDataset.schema_info && <Button onClick={() => loadPreview(selectedDataset.id)} style={{ marginTop: 12 }}>Load Data Preview</Button>}
               </>}
             </div> },
           { key: "insights", label: <span>Insights</span>,

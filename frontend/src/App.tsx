@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ConfigProvider, theme } from "antd";
 import { useAuthStore } from "./stores/auth";
+import ErrorBoundary from "./components/ErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import ProjectPage from "./pages/ProjectPage";
+import NotFoundPage from "./pages/NotFoundPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -30,25 +32,28 @@ function App() {
       }}
     >
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/project/:projectId"
-            element={
-              <ProtectedRoute>
-                <ProjectPage />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <HomePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/project/:projectId"
+              element={
+                <ProtectedRoute>
+                  <ProjectPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     </ConfigProvider>
   );
