@@ -1,45 +1,65 @@
-"""Agent tools — SQL execution and chart generation."""
-from typing import Any
-from tools.query_engine import get_engine, load_dataset, get_mysql_connector
+"""Agent tools — registry-based tool execution."""
+from typing import Any, Callable, Protocol
+from dataclasses import dataclass, field
+from tools.query_engine import get_engine, engine_registry, QueryResult
 from database import SessionLocal
 from models.project import Dataset
 
 
-def execute_query(project_id: str, sql: str) -> dict[str, Any]:
-    """Execute SQL against the project's dataset (DuckDB or MySQL)."""
-    # Check if this project uses MySQL
-    mysql = get_mysql_connector(project_id)
-    if mysql:
-        return mysql.query(sql)
+@dataclass
+class Tool:
+    """A tool that can be invoked by the agent."""
+    name: str
+    description: str
+    fn: Callable[..., Any]
+    parameters: dict[str, str] = field(default_factory=dict)
 
-    # Default: DuckDB
-    db = SessionLocal()
-    try:
-        dataset = (
-            db.query(Dataset)
-            .filter(Dataset.project_id == project_id)
-            .order_by(Dataset.created_at.desc())
-            .first()
-        )
-        if dataset:
-            engine = get_engine(project_id)
-            load_dataset(engine, dataset.file_path, dataset.source_type)
-    finally:
-        db.close()
 
+class ToolRegistry:
+    """Dynamic registry for agent tools. Supports runtime registration for Skills and MCPs."""
+
+    def __init__(self):
+        self._tools: dict[str, Tool] = {}
+
+    def register(self, tool: Tool):
+        self._tools[tool.name] = tool
+
+    def get(self, name: str) -> Tool | None:
+        return self._tools.get(name)
+
+    def list(self) -> list[Tool]:
+        return list(self._tools.values())
+
+    def remove(self, name: str):
+        self._tools.pop(name, None)
+
+
+# Global singleton
+tool_registry = ToolRegistry()
+
+
+# ---- Built-in tools ----
+
+def _execute_query_tool(project_id: str, sql: str) -> QueryResult:
+    """Execute SQL query (DuckDB or MySQL)."""
     engine = get_engine(project_id)
     return engine.query(sql)
 
 
-def suggest_chart(sql: str, query_result: dict[str, Any]) -> dict[str, Any] | None:
-    """Suggest a chart configuration based on query results."""
-    columns = query_result.get("columns", [])
-    rows = query_result.get("rows", [])
+def _get_schema_tool(project_id: str, table_name: str = "data") -> list[dict]:
+    """Get schema for a table."""
+    engine = get_engine(project_id)
+    schema = engine.get_schema(table_name)
+    return [{"name": c.name, "type": c.type, "missing_pct": c.missing_pct} for c in schema]
 
+
+def _suggest_chart_tool(query_result: QueryResult) -> dict[str, Any] | None:
+    """Auto-suggest a chart configuration from query results."""
+    columns = query_result.columns
+    rows = query_result.rows
     if not columns or not rows:
         return None
 
-    # Auto-suggest: if 2 columns with the second being numeric → bar chart
     if len(columns) == 2 and len(rows) > 0:
         try:
             float(str(rows[0][1]).replace(",", ""))
@@ -63,5 +83,38 @@ def suggest_chart(sql: str, query_result: dict[str, Any]) -> dict[str, Any] | No
             }
         except (ValueError, IndexError):
             pass
-
     return None
+
+
+# Register built-in tools
+tool_registry.register(Tool(
+    name="execute_query",
+    description="Execute a SQL query against the project's dataset",
+    fn=_execute_query_tool,
+))
+tool_registry.register(Tool(
+    name="get_schema",
+    description="Get schema information for a table",
+    fn=_get_schema_tool,
+))
+tool_registry.register(Tool(
+    name="suggest_chart",
+    description="Suggest a chart configuration based on query results",
+    fn=_suggest_chart_tool,
+))
+
+
+# ---- Backward-compatible shortcuts ----
+
+def execute_query(project_id: str, sql: str) -> dict[str, Any]:
+    result = _execute_query_tool(project_id, sql)
+    return {"columns": result.columns, "rows": result.rows, "row_count": result.row_count}
+
+
+def suggest_chart(sql: str, query_result: dict[str, Any]) -> dict[str, Any] | None:
+    qr = QueryResult(
+        columns=query_result.get("columns", []),
+        rows=query_result.get("rows", []),
+        row_count=query_result.get("row_count", 0),
+    )
+    return _suggest_chart_tool(qr)
