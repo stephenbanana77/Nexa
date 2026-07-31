@@ -1,6 +1,7 @@
-"""DuckDB query engine for CSV analysis."""
+"""DuckDB query engine for CSV analysis and MySQL connector."""
 import duckdb
 import pandas as pd
+import pymysql
 import chardet
 from pathlib import Path
 from utils.config import settings
@@ -50,13 +51,74 @@ class DuckDBEngine:
         return result[0] if result else 0
 
 
+class MySQLConnector:
+    """MySQL query engine for connected databases."""
+
+    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+        self.config = {"host": host, "port": port, "user": user, "password": password, "database": database}
+        self.connection = None
+
+    def connect(self):
+        self.connection = pymysql.connect(**self.config, cursorclass=pymysql.cursors.Cursor)
+
+    def query(self, sql: str) -> dict:
+        if not self.connection:
+            self.connect()
+        with self.connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            return {
+                "columns": columns,
+                "rows": [list(row) for row in rows],
+                "row_count": len(rows),
+            }
+
+    def get_tables(self) -> list[dict]:
+        if not self.connection:
+            self.connect()
+        with self.connection.cursor() as cursor:
+            cursor.execute("SHOW TABLES")
+            tables = cursor.fetchall()
+            result = []
+            for (table_name,) in tables:
+                cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+                (count,) = cursor.fetchone()
+                result.append({"name": table_name, "row_count": count})
+            return result
+
+    def get_schema(self, table_name: str) -> list[dict]:
+        if not self.connection:
+            self.connect()
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"DESCRIBE `{table_name}`")
+            columns = cursor.fetchall()
+            return [{"name": col[0], "type": col[1]} for col in columns]
+
+    def close(self):
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+
+
 _engines: dict[str, DuckDBEngine] = {}
+_mysql_connectors: dict[str, MySQLConnector] = {}
 
 
 def get_engine(project_id: str) -> DuckDBEngine:
     if project_id not in _engines:
         _engines[project_id] = DuckDBEngine()
     return _engines[project_id]
+
+
+def get_mysql_connector(project_id: str) -> MySQLConnector | None:
+    return _mysql_connectors.get(project_id)
+
+
+def register_mysql(project_id: str, host: str, port: int, user: str, password: str, database: str):
+    connector = MySQLConnector(host, port, user, password, database)
+    connector.connect()  # Test connection
+    _mysql_connectors[project_id] = connector
 
 
 def load_dataset(engine: DuckDBEngine, file_path: str, source_type: str) -> None:

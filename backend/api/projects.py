@@ -269,3 +269,61 @@ def query_dataset(
         return engine.query(req.sql)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
+
+
+class MySQLConnectRequest(BaseModel):
+    project_id: str
+    host: str
+    port: int = 3306
+    user: str
+    password: str
+    database: str
+
+
+@router.post("/datasets/connect-mysql")
+def connect_mysql(
+    req: MySQLConnectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Connect a MySQL database as a data source."""
+    project = (
+        db.query(Project)
+        .filter(Project.id == req.project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from tools import register_mysql, get_mysql_connector
+
+    try:
+        register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)
+        connector = get_mysql_connector(req.project_id)
+        tables = connector.get_tables()
+
+        # Create a virtual dataset entry for the MySQL connection
+        dataset = Dataset(
+            project_id=req.project_id,
+            name=f"mysql://{req.database}",
+            source_type="mysql",
+            file_path="",
+            row_count=sum(t["row_count"] for t in tables),
+            column_count=0,
+            schema_info=[
+                {"name": t["name"], "type": "table", "missing_pct": 0, "missing_count": 0}
+                for t in tables
+            ],
+        )
+        db.add(dataset)
+        db.commit()
+        db.refresh(dataset)
+
+        return {
+            "id": dataset.id,
+            "name": dataset.name,
+            "tables": tables,
+            "row_count": dataset.row_count,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"MySQL connection failed: {str(e)}")

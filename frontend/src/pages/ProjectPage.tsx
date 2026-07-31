@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, Upload, Button, Table, Select, message, Spin } from "antd";
-import { UploadOutlined, ArrowLeftOutlined } from "@ant-design/icons";
+import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -9,6 +9,7 @@ import api from "../api/client";
 import ChatPage from "./ChatPage";
 import InsightsPage from "./InsightsPage";
 import NotebookPage from "./NotebookPage";
+import MySQLConnectModal from "../components/MySQLConnectModal";
 
 interface SchemaField {
   name: string;
@@ -45,6 +46,7 @@ export default function ProjectPage() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [mysqlModalOpen, setMysqlModalOpen] = useState(false);
 
   useEffect(() => {
     api.get(`/api/projects/${projectId}`).then(({ data }) => setProject(data)).catch(() => navigate("/"));
@@ -128,9 +130,12 @@ export default function ProjectPage() {
             children: <div style={{ padding: "12px 0", maxWidth: 800 }}><ChatPage projectId={projectId!} /></div> },
           { key: "data", label: <span>Data</span>,
             children: <div style={{ padding: "24px 0", maxWidth: 900 }}>
-              <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
-                <Button icon={<UploadOutlined />} loading={uploading} size="large" style={{ marginBottom: 20 }}>Upload CSV / Excel</Button>
-              </Upload>
+              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
+                  <Button icon={<UploadOutlined />} loading={uploading} size="large">Upload CSV / Excel</Button>
+                </Upload>
+                <Button icon={<DatabaseOutlined />} size="large" onClick={() => setMysqlModalOpen(true)}>Connect MySQL</Button>
+              </div>
               {datasets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <span style={{ color: "#888", fontSize: 12, marginRight: 8 }}>Dataset:</span>
@@ -171,6 +176,22 @@ export default function ProjectPage() {
           { key: "notebook", label: <span>Notebook</span>,
             children: <div style={{ padding: "12px 0", maxWidth: 800 }}><NotebookPage projectId={projectId!} /></div> },
         ]}
+      />
+      <MySQLConnectModal
+        projectId={projectId!}
+        open={mysqlModalOpen}
+        onClose={() => setMysqlModalOpen(false)}
+        onConnected={(data) => {
+          setDatasets((prev) => [{
+            id: data.id,
+            name: data.name,
+            row_count: data.row_count,
+            column_count: 0,
+            schema_info: [],
+            created_at: new Date().toISOString(),
+          }, ...prev]);
+          setSelectedDatasetId(data.id);
+        }}
       />
     </div>
   );

@@ -1,9 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { Button, Input, message } from "antd";
-import { SendOutlined, SaveOutlined, BookOutlined } from "@ant-design/icons";
+import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
+import ReactECharts from "echarts-for-react";
 import api from "../api/client";
 import "./ChatPage.css";
+
+interface ChartConfig {
+  type: string;
+  title: string;
+  options: Record<string, any>;
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -12,6 +19,7 @@ interface ChatMessage {
   columns?: string[];
   rows?: any[][];
   row_count?: number;
+  charts?: ChartConfig[];
 }
 
 interface ProgressStage {
@@ -26,12 +34,14 @@ const STAGES: ProgressStage[] = [
   { name: "sql_generating", label: "Generating SQL", status: "pending" },
   { name: "querying", label: "Querying data", status: "pending" },
   { name: "analyzing", label: "Analyzing results", status: "pending" },
+  { name: "visualizing", label: "Generating charts", status: "pending" },
 ];
 
 export default function ChatPage({ projectId }: { projectId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
   const [showProgress, setShowProgress] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -46,10 +56,14 @@ export default function ChatPage({ projectId }: { projectId: string }) {
     setStages((prev) =>
       prev.map((s) => {
         if (s.name === eventName) return { ...s, status };
-        if (status === "running" && s.status === "pending") return s;
         return s;
       })
     );
+  };
+
+  const newConversation = () => {
+    setMessages([]);
+    setConversationId(null);
   };
 
   const handleSend = async () => {
@@ -64,13 +78,16 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
     try {
       const token = localStorage.getItem("nexa_token");
+      const body: any = { project_id: projectId, message: text };
+      if (conversationId) body.conversation_id = conversationId;
+
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ project_id: projectId, message: text }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) throw new Error("Stream failed");
@@ -98,26 +115,24 @@ export default function ChatPage({ projectId }: { projectId: string }) {
               if (eventName === "understanding") {
                 updateStage("understanding", "done");
               } else if (eventName === "planning") {
-                updateStage("understanding", "done");
                 updateStage("planning", "running");
               } else if (eventName === "sql_generating") {
-                updateStage("understanding", "done");
                 updateStage("planning", "done");
                 updateStage("sql_generating", "running");
               } else if (eventName === "querying") {
-                updateStage("understanding", "done");
-                updateStage("planning", "done");
                 updateStage("sql_generating", "done");
                 updateStage("querying", "running");
               } else if (eventName === "analyzing") {
-                updateStage("understanding", "done");
-                updateStage("planning", "done");
-                updateStage("sql_generating", "done");
                 updateStage("querying", "done");
                 updateStage("analyzing", "running");
+              } else if (eventName === "visualizing") {
+                updateStage("analyzing", "done");
+                updateStage("visualizing", "running");
               } else if (eventName === "insight") {
                 setShowProgress(false);
                 finalData = data;
+              } else if (eventName === "conversation_created") {
+                setConversationId(data.conversation_id);
               } else if (eventName === "done") {
                 setShowProgress(false);
               } else if (eventName === "error") {
@@ -138,6 +153,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
           columns: finalData.columns,
           rows: finalData.rows,
           row_count: finalData.row_count,
+          charts: finalData.charts || [],
         },
       ]);
     } catch (err: any) {
@@ -156,15 +172,17 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
   const saveInsight = async (msg: ChatMessage) => {
     try {
+      const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
       await api.post("/api/insights/", {
         project_id: projectId,
-        question: messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg))?.content || "",
+        question: userMsg?.content || "",
         content: {
           summary: msg.content,
           sql: msg.sql,
           columns: msg.columns,
           rows: msg.rows?.slice(0, 20),
           row_count: msg.row_count,
+          charts: msg.charts || [],
         },
       });
       message.success("Insight saved");
@@ -175,8 +193,9 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
   const openInNotebook = async (msg: ChatMessage) => {
     try {
-      const cells = [];
-      cells.push({ cell_type: "markdown", content: `# Analysis: ${messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg))?.content || ""}`, sort_order: 0 });
+      const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
+      const cells: any[] = [];
+      cells.push({ cell_type: "markdown", content: `# Analysis: ${userMsg?.content || ""}`, sort_order: 0 });
       if (msg.sql) cells.push({ cell_type: "sql", content: msg.sql, sort_order: 1 });
       cells.push({ cell_type: "markdown", content: `## Result\n\n${msg.content}`, sort_order: cells.length });
       await api.post("/api/notebooks/", { project_id: projectId, cells });
@@ -189,6 +208,17 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
   return (
     <div style={{ height: "calc(100vh - 130px)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: "#666" }}>
+          {conversationId ? "Continue conversation" : "New conversation"}
+        </span>
+        {messages.length > 0 && (
+          <Button size="small" type="text" icon={<PlusOutlined />} onClick={newConversation} style={{ color: "#888" }}>
+            New Chat
+          </Button>
+        )}
+      </div>
+
       <div
         style={{
           flex: 1,
@@ -217,6 +247,29 @@ export default function ChatPage({ projectId }: { projectId: string }) {
               <div className="avatar">N</div>
               <div className="content">
                 <ReactMarkdown>{msg.content}</ReactMarkdown>
+
+                {/* Inline ECharts */}
+                {msg.charts && msg.charts.length > 0 && msg.charts.map((chart, ci) => (
+                  <div key={ci} style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 11, color: "#666", marginBottom: 4, textTransform: "uppercase" }}>
+                      {chart.title}
+                    </div>
+                    <div style={{
+                      background: "#0d0d0d",
+                      borderRadius: 6,
+                      padding: 8,
+                      border: "0.5px solid #333",
+                    }}>
+                      <ReactECharts
+                        option={chart.options}
+                        style={{ height: 220, width: "100%" }}
+                        theme="dark"
+                        notMerge
+                      />
+                    </div>
+                  </div>
+                ))}
+
                 {msg.sql && (
                   <pre
                     style={{
