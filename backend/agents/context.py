@@ -32,8 +32,8 @@ def get_preview_context(project_id: str) -> str:
     try:
         result = engine.preview(limit=5)
         lines = ["Sample data (first 5 rows):"]
-        lines.append(" | ".join(result["columns"]))
-        for row in result["rows"][:5]:
+        lines.append(" | ".join(result.columns))
+        for row in result.rows[:5]:
             lines.append(" | ".join(str(v) for v in row))
         return "\n".join(lines)
     except Exception:

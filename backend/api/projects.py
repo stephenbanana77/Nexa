@@ -140,10 +140,10 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
-    from tools import get_engine, load_dataset
+    from tools import load_dataset, get_engine
 
+    load_dataset(project_id, file_path, dataset.source_type)
     engine = get_engine(project_id)
-    load_dataset(engine, file_path, dataset.source_type)
 
     return {
         "id": dataset.id,
@@ -235,8 +235,8 @@ def preview_dataset(
 
     from tools import get_engine, load_dataset
 
+    load_dataset(project.id, dataset.file_path, dataset.source_type)
     engine = get_engine(project.id)
-    load_dataset(engine, dataset.file_path, dataset.source_type)
 
     return engine.preview(limit=limit)
 
@@ -262,8 +262,8 @@ def query_dataset(
 
     from tools import get_engine, load_dataset
 
+    load_dataset(project.id, dataset.file_path, dataset.source_type)
     engine = get_engine(project.id)
-    load_dataset(engine, dataset.file_path, dataset.source_type)
 
     try:
         return engine.query(req.sql)
@@ -295,11 +295,11 @@ def connect_mysql(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    from tools import register_mysql, get_mysql_connector
+    from tools import register_mysql, get_engine
 
     try:
         register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)
-        connector = get_mysql_connector(req.project_id)
+        connector = get_engine(req.project_id)
         tables = connector.get_tables()
 
         # Create a virtual dataset entry for the MySQL connection

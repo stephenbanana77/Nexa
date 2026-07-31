@@ -16,32 +16,9 @@ from agents.nodes import (
 from agents.context import get_schema_context
 
 
-def route_after_understand(state: AgentState) -> str:
-    return state.get("next_action", "plan")
-
-
-def route_after_plan(state: AgentState) -> str:
-    return state.get("next_action", "generate_sql")
-
-
-def route_after_generate(state: AgentState) -> str:
-    return state.get("next_action", "execute")
-
-
 def route_after_execute(state: AgentState) -> str:
+    """Route after SQL execution: retry on error, analyze on success, compose on final failure."""
     return state.get("next_action", "analyze")
-
-
-def route_after_analyze(state: AgentState) -> str:
-    return state.get("next_action", "visualize")
-
-
-def route_after_visualize(state: AgentState) -> str:
-    return state.get("next_action", "compose")
-
-
-def route_after_compose(state: AgentState) -> str:
-    return END
 
 
 def build_agent_graph() -> StateGraph:
