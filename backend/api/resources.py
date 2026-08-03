@@ -8,7 +8,6 @@ from resources.registry import (
     get_references,
     get_referrers,
     delete_resource,
-    parse_uri,
 )
 
 router = APIRouter(prefix="/api/resources", tags=["resources"])

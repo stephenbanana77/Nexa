@@ -101,7 +101,7 @@ async def chat_stream(
     history = get_conversation_history(conv_id)
 
     # Run agent with history
-    controller = AgentController(req.project_id, req.message, history=history)
+    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id)
 
     async def event_stream():
         full_response = ""

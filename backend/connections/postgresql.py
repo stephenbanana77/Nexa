@@ -61,7 +61,8 @@ class PostgreSQLConnector(DataSourceEngine):
         return self.preview(tables[0], limit)
 
     def get_schema(self, table: str = None) -> list[dict]:
-        """Get schema info for tables."""
+        """Get schema info. If table is None, returns list of table names.
+        If table is specified, returns list of column dicts with name/type/nullable."""
         conn = self._connect()
         cursor = conn.cursor()
         if table:
@@ -71,22 +72,22 @@ class PostgreSQLConnector(DataSourceEngine):
                 WHERE table_schema = 'public' AND table_name = %s
                 ORDER BY ordinal_position
             """, (table,))
+            return [
+                {"name": row[0], "type": row[1], "nullable": row[2] == "YES"}
+                for row in cursor.fetchall()
+            ]
         else:
             cursor.execute("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
                 ORDER BY table_name
             """)
-            return [row[0] for row in cursor.fetchall()]
-
-        return [
-            {"name": row[0], "type": row[1], "nullable": row[2] == "YES"}
-            for row in cursor.fetchall()
-        ]
+            return [{"name": row[0]} for row in cursor.fetchall()]
 
     def get_tables(self) -> list[str]:
         """Get all table names."""
-        return self.get_schema()  # returns list of table names when table=None
+        tables = self.get_schema()
+        return [t["name"] for t in tables]
 
     def health_check(self) -> bool:
         """Test the connection."""

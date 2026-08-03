@@ -44,7 +44,7 @@ def create_connection(
         )
         if not connector.health_check():
             raise HTTPException(status_code=400, detail="Connection failed")
-        engine_registry.register_engine(req.project_id, connector)
+        engine_registry.register(req.project_id, connector)
     elif req.engine == "mysql":
         from tools import register_mysql, get_engine
         register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)

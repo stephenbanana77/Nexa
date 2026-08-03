@@ -5,8 +5,6 @@ from .resource import Resource, ResourceReference, ResourceType
 from .run import Run, RunStep
 from .workflow import Workflow, WorkflowStep
 
-from .workflow import Workflow, WorkflowStep
-
 __all__ = [
     "User", "ApiKey",
     "Project", "Dataset", "Conversation", "Message", "Insight", "Chart",
