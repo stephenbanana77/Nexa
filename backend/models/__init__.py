@@ -3,6 +3,9 @@ from .project import Project, Dataset, Conversation, Message, Insight, Chart, No
 from .skill import Skill, SkillExecution
 from .resource import Resource, ResourceReference, ResourceType
 from .run import Run, RunStep
+from .workflow import Workflow, WorkflowStep
+
+from .workflow import Workflow, WorkflowStep
 
 __all__ = [
     "User", "ApiKey",
@@ -11,4 +14,5 @@ __all__ = [
     "Skill", "SkillExecution",
     "Resource", "ResourceReference", "ResourceType",
     "Run", "RunStep",
+    "Workflow", "WorkflowStep",
 ]
