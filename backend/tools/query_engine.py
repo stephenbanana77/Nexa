@@ -63,7 +63,7 @@ class DuckDBEngine(DataSourceEngine):
 
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
-        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
+        self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
         with open(file_path, "rb") as f:
             raw = f.read(200000)
         encoding = chardet.detect(raw)["encoding"] or "utf-8"
@@ -78,7 +78,7 @@ class DuckDBEngine(DataSourceEngine):
     def register_excel(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         df = pd.read_excel(file_path)
-        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
+        self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
         self.conn.register(safe_name, df)
         self._tables.add(safe_name)
         self._table_row_counts[safe_name] = len(df)
