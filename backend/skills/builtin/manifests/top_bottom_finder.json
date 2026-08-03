@@ -1,0 +1,18 @@
+{
+  "name": "top_bottom_finder",
+  "title": "排行榜分析",
+  "description": "找出任意指标的前 N 名和后 N 名",
+  "version": "1.0.0",
+  "category": "analysis",
+  "icon": "TrophyOutlined",
+  "author": "Nexa",
+  "inputs": {"dataset": {"type": "resource", "resource_type": "dataset", "required": true}},
+  "outputs": {"chart": {"type": "resource", "resource_type": "chart"}, "insight": {"type": "resource", "resource_type": "insight"}},
+  "permissions": {"read": ["schema", "data"], "write": ["chart", "insight"], "network": false, "llm": true},
+  "agent_callable": true,
+  "steps": [
+    {"id": "rank_query", "type": "sql", "prompt": "找出最重要的数值指标前10名和后10名，降序排列前10，升序排列后10"},
+    {"id": "rank_chart", "type": "visualize", "chart": "bar", "depends_on": ["rank_query"]},
+    {"id": "rank_insight", "type": "insight", "prompt": "分析排行：1) 头名与次名差距 2) 垫底共同特征 3) 优化建议", "depends_on": ["rank_query"]}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "schema_inspector",
+  "title": "Schema 检查器",
+  "description": "获取数据集的 Schema 信息：列名、类型、缺失率",
+  "version": "1.0.0",
+  "category": "tools",
+  "icon": "TableOutlined",
+  "author": "Nexa",
+  "inputs": {"project_id": {"type": "text", "required": true}},
+  "outputs": {"schema": {"type": "data", "description": "Column schema with name, type, missing_pct"}},
+  "permissions": {"read": ["schema"], "write": [], "network": false, "llm": false},
+  "agent_callable": true,
+  "steps": []
+}

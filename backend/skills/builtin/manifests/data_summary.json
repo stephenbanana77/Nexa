@@ -1,0 +1,55 @@
+{
+  "name": "data_summary",
+  "title": "数据概览",
+  "description": "自动生成数据集的整体统计概览：行数、列数、缺失值、数值分布",
+  "version": "1.0.0",
+  "category": "statistics",
+  "icon": "BarChartOutlined",
+  "author": "Nexa",
+  "inputs": {
+    "dataset": {
+      "type": "resource",
+      "resource_type": "dataset",
+      "required": true,
+      "description": "要分析的数据集"
+    }
+  },
+  "outputs": {
+    "summary": {
+      "type": "resource",
+      "resource_type": "insight",
+      "description": "分析结果洞察"
+    },
+    "chart": {
+      "type": "resource",
+      "resource_type": "chart",
+      "description": "概览图表"
+    }
+  },
+  "permissions": {
+    "read": ["schema", "data"],
+    "write": ["insight", "chart"],
+    "network": false,
+    "llm": true
+  },
+  "agent_callable": true,
+  "steps": [
+    {
+      "id": "generate_stats",
+      "type": "sql",
+      "prompt": "生成数据集整体统计信息：总行数、每列数据类型、缺失值数量和比例。数值列计算最小值、最大值、平均值和中位数。"
+    },
+    {
+      "id": "overview_chart",
+      "type": "visualize",
+      "chart": "bar",
+      "depends_on": ["generate_stats"]
+    },
+    {
+      "id": "summary_insight",
+      "type": "insight",
+      "prompt": "总结数据概览：1) 数据集整体规模 2) 哪些列有较多缺失值 3) 数值列的分布特点 4) 建议下一步分析方向",
+      "depends_on": ["generate_stats", "overview_chart"]
+    }
+  ]
+}

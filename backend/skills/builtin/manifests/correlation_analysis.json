@@ -1,0 +1,23 @@
+{
+  "name": "correlation_analysis",
+  "title": "相关性分析",
+  "description": "分析数值列之间的相关性，找出最相关的字段对",
+  "version": "1.0.0",
+  "category": "statistics",
+  "icon": "DotChartOutlined",
+  "author": "Nexa",
+  "inputs": {
+    "dataset": {"type": "resource", "resource_type": "dataset", "required": true}
+  },
+  "outputs": {
+    "chart": {"type": "resource", "resource_type": "chart"},
+    "insight": {"type": "resource", "resource_type": "insight"}
+  },
+  "permissions": {"read": ["schema", "data"], "write": ["chart", "insight"], "network": false, "llm": true},
+  "agent_callable": true,
+  "steps": [
+    {"id": "corr_query", "type": "sql", "prompt": "计算所有数值列的两两相关系数(CORR)，输出TOP 10按绝对值降序排列"},
+    {"id": "corr_chart", "type": "visualize", "chart": "bar", "depends_on": ["corr_query"]},
+    {"id": "corr_insight", "type": "insight", "prompt": "分析相关性：1) 最强正相关及业务逻辑 2) 是否存在负相关 3) 2-3条业务建议", "depends_on": ["corr_query"]}
+  ]
+}

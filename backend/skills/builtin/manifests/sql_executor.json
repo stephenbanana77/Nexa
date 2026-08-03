@@ -1,0 +1,14 @@
+{
+  "name": "sql_executor",
+  "title": "SQL 执行器",
+  "description": "执行 SQL 查询并返回结果",
+  "version": "1.0.0",
+  "category": "tools",
+  "icon": "CodeOutlined",
+  "author": "Nexa",
+  "inputs": {"sql": {"type": "text", "required": true}, "project_id": {"type": "text", "required": true}},
+  "outputs": {"result": {"type": "data", "description": "QueryResult with columns, rows, row_count"}},
+  "permissions": {"read": ["schema", "data"], "write": [], "network": false, "llm": false},
+  "agent_callable": true,
+  "steps": []
+}
