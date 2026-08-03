@@ -49,7 +49,7 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d0d0d", padding: 40 }}>
-      <div style={{ maxWidth: 800, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 600, color: "#fff", margin: 0 }}>Nexa</h1>

@@ -33,10 +33,38 @@ def save_insight(
     db.commit()
     db.refresh(insight)
 
+    # Register as Resource
+    from resources.registry import register_resource, add_reference
+    summary = req.content.get("summary", "")[:100]
+    register_resource(
+        resource_type="insight",
+        resource_id=insight.id,
+        name=req.question[:80] or "Insight",
+        project_id=req.project_id,
+        description=summary,
+        metadata={"summary": summary, "sql": req.content.get("sql"), "row_count": req.content.get("row_count")},
+        ref_id=insight.id,
+    )
+
     charts = req.content.get("charts", [])
     for c in charts:
-        chart = Chart(insight_id=insight.id, chart_type=c.get("type", "bar"), config=c.get("config", {}))
+        chart = Chart(insight_id=insight.id, chart_type=c.get("type", "bar"), config=c.get("options", {}))
         db.add(chart)
+        db.flush()
+
+        # Register each chart as Resource
+        chart_title = c.get("title", "Chart")
+        chart_uri = register_resource(
+            resource_type="chart",
+            resource_id=chart.id,
+            name=chart_title,
+            project_id=req.project_id,
+            description=f"{c.get('type', 'bar')} chart",
+            metadata={"chart_type": c.get("type", "bar"), "title": chart_title},
+            ref_id=chart.id,
+        )
+        # Link chart → insight
+        add_reference(f"chart://{chart.id}", f"insight://{insight.id}", "belongs_to")
     db.commit()
 
     return {"id": insight.id, "created_at": insight.created_at.isoformat()}

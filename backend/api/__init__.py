@@ -4,5 +4,6 @@ from .chat import router as chat_router
 from .insights import router as insights_router
 from .notebooks import router as notebooks_router
 from .skills import router as skills_router
+from .resources import router as resources_router
 
-__all__ = ["auth_router", "projects_router", "chat_router", "insights_router", "notebooks_router", "skills_router"]
+__all__ = ["auth_router", "projects_router", "chat_router", "insights_router", "notebooks_router", "skills_router", "resources_router"]

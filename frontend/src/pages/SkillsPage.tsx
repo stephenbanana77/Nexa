@@ -35,7 +35,7 @@ export default function SkillsPage() {
   };
 
   return (
-    <div style={{ padding: `${tokens.spacing.xxl}px 0`, maxWidth: 900 }}>
+    <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
       <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>
         Skills
       </h2>

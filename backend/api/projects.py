@@ -145,6 +145,18 @@ async def upload_dataset(
     load_dataset(project_id, file_path, dataset.source_type)
     engine = get_engine(project_id)
 
+    # Register as Resource
+    from resources.registry import register_resource
+    register_resource(
+        resource_type="dataset",
+        resource_id=dataset.id,
+        name=dataset.name,
+        project_id=project_id,
+        description=f"{dataset.row_count} rows, {dataset.column_count} columns",
+        metadata={"row_count": dataset.row_count, "column_count": dataset.column_count, "source_type": dataset.source_type},
+        ref_id=dataset.id,
+    )
+
     return {
         "id": dataset.id,
         "name": dataset.name,

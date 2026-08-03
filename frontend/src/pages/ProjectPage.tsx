@@ -127,9 +127,9 @@ export default function ProjectPage() {
       <Tabs defaultActiveKey="chat" style={{ padding: "0 24px" }} tabBarStyle={{ borderBottom: "1px solid #333" }}
         items={[
           { key: "chat", label: <span style={{ color: "#60a5fa" }}>Chat</span>,
-            children: <div style={{ padding: "12px 0", maxWidth: 800 }}><ChatPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><ChatPage projectId={projectId!} /></div> },
           { key: "data", label: <span>Data</span>,
-            children: <div style={{ padding: "24px 0", maxWidth: 900 }}>
+            children: <div style={{ padding: "24px 0", width: "100%" }}>
               <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
                 <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
                   <Button icon={<UploadOutlined />} loading={uploading} size="large">Upload CSV / Excel</Button>
@@ -172,9 +172,9 @@ export default function ProjectPage() {
               </>}
             </div> },
           { key: "insights", label: <span>Insights</span>,
-            children: <div style={{ padding: "12px 0", maxWidth: 700 }}><InsightsPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><InsightsPage projectId={projectId!} /></div> },
           { key: "notebook", label: <span>Notebook</span>,
-            children: <div style={{ padding: "12px 0", maxWidth: 800 }}><NotebookPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><NotebookPage projectId={projectId!} /></div> },
         ]}
       />
       <MySQLConnectModal

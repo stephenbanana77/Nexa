@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
-from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution
-from api import auth_router, projects_router, chat_router, insights_router, notebooks_router, skills_router
+from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution, Resource, ResourceReference
+from api import auth_router, projects_router, chat_router, insights_router, notebooks_router, skills_router, resources_router
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(chat_router)
 app.include_router(insights_router)
 app.include_router(notebooks_router)
 app.include_router(skills_router)
+app.include_router(resources_router)
 
 
 @app.get("/api/health")

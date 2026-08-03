@@ -28,6 +28,7 @@ function App() {
           colorTextSecondary: "#888",
           colorBorder: "#333",
           borderRadius: 8,
+          fontSize: 15,
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         },
       }}
