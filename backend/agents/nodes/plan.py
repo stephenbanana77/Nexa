@@ -8,15 +8,15 @@ def plan_steps(state: AgentState) -> dict:
     question = state["question"]
     schema = state.get("schema", "")
 
-    prompt = f"""Plan the SQL analysis steps for this question. Output a JSON array of step descriptions.
+    prompt = f"""为以下问题规划 SQL 分析步骤。输出一个 JSON 字符串数组。
 
-Dataset schema:
+数据集 schema：
 {schema}
 
-Question: {question}
+问题：{question}
 
-Respond with ONLY a JSON array of strings, e.g.: ["Step 1", "Step 2"]
-Keep it to 1-3 steps. If a single query answers it, output 1 step."""
+只返回 JSON 字符串数组，如：["步骤1", "步骤2"]
+保持 1-3 步。如果单条 SQL 能回答，只输出 1 步。"""
 
     response = chat([{"role": "user", "content": prompt}])
     try:

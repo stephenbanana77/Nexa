@@ -20,22 +20,22 @@ def select_skill(state: AgentState) -> dict:
         for s in available_skills
     )
 
-    prompt = f"""You are a data analysis router. Given a user question and available skills, decide:
+    prompt = f"""你是一个数据分析路由器。根据用户问题和可用技能，决定：
 
-1. Should this question use a skill? (Skills are pre-built analysis pipelines)
-2. Which skill is the best match?
+1. 这个问题是否应该使用技能？（技能是预置的分析流水线）
+2. 哪个技能最匹配？
 
-Available skills:
+可用技能：
 {skill_list}
 
-User question: {question}
+用户问题：{question}
 
-Rules:
-- If the question asks for overview/summary/correlation/trend/rankings, select the matching skill
-- If the question is a simple query (e.g., "show me X", "filter by Y"), respond with "none"
-- Respond with ONLY a JSON: {{"use_skill": true/false, "skill_name": "xxx"}} or {{"use_skill": false}}
+规则：
+- 如果问题涉及概览/摘要/相关性/趋势/排行榜，选择匹配的技能
+- 如果是简单查询（如"显示X"、"过滤Y"），回复 "none"
+- 只返回 JSON：{{"use_skill": true/false, "skill_name": "xxx"}} 或 {{"use_skill": false}}
 
-Respond with ONLY valid JSON, no markdown."""
+只返回有效 JSON，不要 markdown。"""
 
     response = chat([{"role": "user", "content": prompt}])
     try:

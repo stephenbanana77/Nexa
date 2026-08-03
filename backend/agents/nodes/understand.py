@@ -11,17 +11,17 @@ def understand_intent(state: AgentState) -> dict:
     if not schema:
         schema = get_schema_context(state["project_id"])
 
-    prompt = f"""You are a data analyst. Given a user question and dataset schema, output a JSON object with:
-- "intent": one of ["query", "analysis", "comparison", "trend", "summary"]
-- "entities": list of column names or concepts referenced
+    prompt = f"""你是一个数据分析师。根据用户问题和数据集 schema，输出一个 JSON 对象，包含：
+- "intent": 取值为 ["query", "analysis", "comparison", "trend", "summary"] 之一
+- "entities": 引用到的列名或概念列表
 - "needs_sql": true/false
 
-Schema:
+Schema：
 {schema}
 
-Question: {question}
+问题：{question}
 
-Respond with ONLY valid JSON, no markdown, no explanation."""
+只返回有效的 JSON，不要 markdown，不要解释。"""
 
     response = chat([{"role": "user", "content": prompt}])
     try:

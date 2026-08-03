@@ -13,14 +13,14 @@ def visualize(state: AgentState) -> dict:
 
     if not chart and result.get("rows"):
         columns = result.get("columns", [])
-        prompt = f"""Given these query results, suggest an ECharts chart configuration.
-Return ONLY valid JSON with "type", "title", "options".
+        prompt = f"""根据以下查询结果，推荐一个 ECharts 图表配置。
+只返回有效 JSON，包含 "type"（图表类型）、"title"（中文标题）、"options"（ECharts 配置项）。
 
-Columns: {columns}
-Sample rows: {result['rows'][:3]}
-Row count: {result['row_count']}
+列名：{columns}
+示例数据：{result['rows'][:3]}
+行数：{result['row_count']}
 
-Respond with ONLY the JSON, no markdown."""
+只返回 JSON，不要 markdown。"""
 
         response = chat([{"role": "user", "content": prompt}])
         try:
