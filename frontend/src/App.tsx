@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import ProjectPage from "./pages/ProjectPage";
+import SkillsPage from "./pages/SkillsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ProjectPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/project/:projectId/skills"
+              element={
+                <ProtectedRoute>
+                  <SkillsPage />
                 </ProtectedRoute>
               }
             />

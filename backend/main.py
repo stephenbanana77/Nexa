@@ -5,13 +5,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
-from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell
-from api import auth_router, projects_router, chat_router, insights_router, notebooks_router
+from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution
+from api import auth_router, projects_router, chat_router, insights_router, notebooks_router, skills_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    # Register built-in skills
+    from skills.builtin import register_builtin_skills
+    register_builtin_skills()
     yield
 
 
@@ -30,6 +33,7 @@ app.include_router(projects_router)
 app.include_router(chat_router)
 app.include_router(insights_router)
 app.include_router(notebooks_router)
+app.include_router(skills_router)
 
 
 @app.get("/api/health")

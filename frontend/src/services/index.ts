@@ -87,4 +87,25 @@ export const notebookService = {
     api.delete(`/api/notebooks/cells/${cellId}`),
 };
 
+// ---- Skills ----
+export const skillService = {
+  list: (category?: string) =>
+    api.get(`/api/skills${category ? `?category=${category}` : ""}`),
+
+  get: (id: string) => api.get(`/api/skills/${id}`),
+
+  getCategories: () => api.get("/api/skills/categories"),
+
+  install: (data: {
+    name: string; title: string; description?: string;
+    category?: string; icon?: string; definition: Record<string, unknown>;
+    version?: string;
+  }) => api.post("/api/skills/install", data),
+
+  delete: (id: string) => api.delete(`/api/skills/${id}`),
+
+  getExecutions: (projectId: string) =>
+    api.get(`/api/skills/executions/${projectId}`),
+};
+
 export { api };

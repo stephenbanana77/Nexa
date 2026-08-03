@@ -1,5 +1,4 @@
-"""LangGraph Agent — dynamic data analysis pipeline."""
-import asyncio
+"""LangGraph Agent — dynamic data analysis pipeline with Skill support."""
 from typing import Any, AsyncGenerator
 from langgraph.graph import StateGraph, END
 
@@ -13,7 +12,18 @@ from agents.nodes import (
     visualize,
     compose_answer,
 )
+from agents.nodes.skill import select_skill, execute_skill_node
 from agents.context import get_schema_context
+
+
+def route_after_plan(state: AgentState) -> str:
+    """After planning, check if a skill should be used."""
+    return "select_skill"
+
+
+def route_after_select(state: AgentState) -> str:
+    """After skill selection, route to skill execution or normal SQL flow."""
+    return state.get("next_action", "generate_sql")
 
 
 def route_after_execute(state: AgentState) -> str:
@@ -28,6 +38,8 @@ def build_agent_graph() -> StateGraph:
     # Add nodes
     workflow.add_node("understand", understand_intent)
     workflow.add_node("plan", plan_steps)
+    workflow.add_node("select_skill", select_skill)
+    workflow.add_node("execute_skill", execute_skill_node)
     workflow.add_node("generate_sql", generate_sql)
     workflow.add_node("execute", execute_sql)
     workflow.add_node("analyze", analyze_result)
@@ -37,7 +49,20 @@ def build_agent_graph() -> StateGraph:
     # Edges
     workflow.set_entry_point("understand")
     workflow.add_edge("understand", "plan")
-    workflow.add_edge("plan", "generate_sql")
+
+    # plan → select_skill (AI decides if skill matches)
+    workflow.add_edge("plan", "select_skill")
+
+    # select_skill → execute_skill (if matched) or generate_sql (fallback)
+    workflow.add_conditional_edges(
+        "select_skill",
+        route_after_select,
+        {"execute_skill": "execute_skill", "generate_sql": "generate_sql"}
+    )
+
+    # execute_skill → compose (skill handles its own analysis internally)
+    workflow.add_edge("execute_skill", "compose")
+
     workflow.add_edge("generate_sql", "execute")
 
     # execute → retry if error, or proceed to analyze
@@ -77,13 +102,16 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None) 
         "analysis": "",
         "chart_config": None,
         "summary": "",
+        "selected_skill": "",
+        "skill_output": {},
         "next_action": "",
     }
 
-    # Map of node names to SSE event names
     node_events = {
         "understand": ("understanding", "Understanding your question..."),
         "plan": ("planning", "Planning analysis steps..."),
+        "select_skill": ("selecting_skill", "Selecting best analysis skill..."),
+        "execute_skill": ("running_skill", "Running skill analysis..."),
         "generate_sql": ("sql_generating", "Generating SQL query..."),
         "execute": ("querying", "Executing query..."),
         "analyze": ("analyzing", "Analyzing results..."),
@@ -95,16 +123,18 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None) 
 
     async for event in _agent_graph.astream(initial_state, stream_mode="updates"):
         for node_name, node_state in event.items():
-            # Update current state
             current_state.update(node_state)
 
             if node_name in node_events:
                 event_name, message = node_events[node_name]
 
-                # Build event data based on node
                 event_data = {"event": event_name, "message": message}
 
-                if node_name == "execute":
+                if node_name == "execute_skill":
+                    event_data["progress"] = 40
+                    event_data["skill"] = current_state.get("selected_skill", "")
+
+                elif node_name == "execute":
                     event_data["sql"] = current_state.get("sql", "")
                     event_data["progress"] = 50
 
@@ -120,7 +150,6 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None) 
                     event_data["progress"] = 85
 
                 elif node_name == "compose":
-                    # Final result event
                     result = current_state.get("query_result", {})
                     event_data = {
                         "event": "insight",
@@ -136,5 +165,4 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None) 
 
                 yield event_data
 
-    # Always send done event at the end
     yield {"event": "done", "message": "Analysis complete", "progress": 100}

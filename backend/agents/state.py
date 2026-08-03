@@ -28,5 +28,9 @@ class AgentState(TypedDict):
     chart_config: dict[str, Any] | None
     summary: str
 
+    # Skill
+    selected_skill: str
+    skill_output: dict[str, Any]
+
     # Flow control
-    next_action: str  # "generate_sql" | "execute" | "analyze" | "visualize" | "compose" | "end"
+    next_action: str  # "generate_sql" | "execute" | "analyze" | "visualize" | "compose" | "end" | "select_skill" | "execute_skill"

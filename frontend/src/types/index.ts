@@ -98,3 +98,36 @@ export interface UserInfo {
   id: string;
   email: string;
 }
+
+// ---- Skill ----
+export interface SkillDefinition {
+  steps: SkillStep[];
+}
+
+export interface SkillStep {
+  type: "sql" | "visualize" | "insight" | "python" | "transform";
+  prompt?: string;
+  chart?: string;
+}
+
+export interface Skill {
+  id?: string;
+  name: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: string;
+  definition: SkillDefinition;
+  version: string;
+  is_builtin: boolean;
+}
+
+export interface SkillExecution {
+  id: string;
+  skill_id: string;
+  status: "pending" | "running" | "done" | "failed";
+  inputs: Record<string, unknown>;
+  output: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+}

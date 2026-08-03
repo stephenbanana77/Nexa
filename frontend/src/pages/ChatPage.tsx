@@ -31,6 +31,7 @@ interface ProgressStage {
 const STAGES: ProgressStage[] = [
   { name: "understanding", label: "Understanding intent", status: "pending" },
   { name: "planning", label: "Planning analysis", status: "pending" },
+  { name: "selecting_skill", label: "Selecting skill", status: "pending" },
   { name: "sql_generating", label: "Generating SQL", status: "pending" },
   { name: "querying", label: "Querying data", status: "pending" },
   { name: "analyzing", label: "Analyzing results", status: "pending" },
@@ -116,6 +117,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 updateStage("understanding", "done");
               } else if (eventName === "planning") {
                 updateStage("planning", "running");
+              } else if (eventName === "selecting_skill") {
+                updateStage("planning", "done");
+                updateStage("selecting_skill", "running");
+              } else if (eventName === "running_skill") {
+                updateStage("selecting_skill", "done");
               } else if (eventName === "sql_generating") {
                 updateStage("planning", "done");
                 updateStage("sql_generating", "running");
