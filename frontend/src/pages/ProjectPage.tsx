@@ -9,6 +9,8 @@ import api from "../api/client";
 import ChatPage from "./ChatPage";
 import InsightsPage from "./InsightsPage";
 import NotebookPage from "./NotebookPage";
+import RunHistoryPage from "./RunHistoryPage";
+import WorkflowPage from "./WorkflowPage";
 import MySQLConnectModal from "../components/MySQLConnectModal";
 
 interface SchemaField {
@@ -175,6 +177,10 @@ export default function ProjectPage() {
             children: <div style={{ padding: "12px 0", width: "100%" }}><InsightsPage projectId={projectId!} /></div> },
           { key: "notebook", label: <span>Notebook</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><NotebookPage projectId={projectId!} /></div> },
+          { key: "history", label: <span>History</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><RunHistoryPage /></div> },
+          { key: "workflows", label: <span>Workflows</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><WorkflowPage /></div> },
         ]}
       />
       <MySQLConnectModal

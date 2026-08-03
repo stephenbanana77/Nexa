@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button, Input, message } from "antd";
-import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined } from "@ant-design/icons";
+import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import ReactECharts from "echarts-for-react";
 import api from "../api/client";
@@ -197,6 +197,20 @@ export default function ChatPage({ projectId }: { projectId: string }) {
     }
   };
 
+  const saveAsWorkflow = async () => {
+    try {
+      const { data } = await api.get(`/api/runs/${projectId}?limit=1`);
+      if (data.length > 0) {
+        await api.post(`/api/workflows/from-run/${data[0].id}`);
+        message.success("Saved as Workflow — check Workflows tab");
+      } else {
+        message.warning("No analysis run found to convert");
+      }
+    } catch {
+      message.error("Failed to save workflow");
+    }
+  };
+
   const openInNotebook = async (msg: ChatMessage) => {
     try {
       const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
@@ -355,6 +369,15 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                   style={{ marginTop: 8, color: "#888" }}
                 >
                   Open in Notebook
+                </Button>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<BranchesOutlined />}
+                  onClick={saveAsWorkflow}
+                  style={{ marginTop: 8, color: "#888" }}
+                >
+                  Save as Workflow
                 </Button>
               </div>
             </div>
