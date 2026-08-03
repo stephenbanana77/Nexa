@@ -8,7 +8,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: #0d0d0d;
   color: #ddd;
-  font-size: 16px;
+  font-size: 18px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -25,6 +25,36 @@ body {
   border-radius: 3px;
 }
 
+/* Ant Design global font overrides */
+.ant-tabs-tab,
+.ant-btn,
+.ant-input,
+.ant-select,
+.ant-tag,
+.ant-breadcrumb,
+.ant-empty-description,
+.ant-table,
+.ant-card,
+.ant-typography {
+  font-size: inherit !important;
+}
+
+.ant-tabs-tab-btn {
+  font-size: 16px !important;
+}
+
+.ant-btn {
+  font-size: 15px !important;
+}
+
+.ant-tag {
+  font-size: 13px !important;
+}
+
+.ant-empty-description {
+  font-size: 15px !important;
+}
+
 /* ag-grid dark theme overrides */
 .ag-theme-alpine-dark {
   --ag-background-color: #1a1a1a;
@@ -32,7 +62,7 @@ body {
   --ag-odd-row-background-color: #1a1a1a;
   --ag-row-hover-color: #242424;
   --ag-border-color: #333;
-  --ag-font-size: 15px;
+  --ag-font-size: 16px;
   --ag-font-family: inherit;
   --ag-foreground-color: #ccc;
   --ag-header-foreground-color: #888;

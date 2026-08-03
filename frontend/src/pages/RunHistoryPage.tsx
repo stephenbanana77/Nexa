@@ -157,7 +157,7 @@ export default function RunHistoryPage() {
                     }}>
                       <span style={{
                         width: 20, height: 20, borderRadius: "50%", background: step.error ? "#dc2626" : "#2563EB",
-                        color: "#fff", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "#fff", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
                         {step.sort_order}
                       </span>
