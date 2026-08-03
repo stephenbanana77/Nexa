@@ -73,12 +73,37 @@ class SkillRegistry:
             db.close()
         return None
 
-    def create_execution(self, skill_id: str, project_id: str, inputs: dict = None) -> str:
-        """Create a skill execution record and return its ID."""
+    def create_execution(self, skill_id_or_name: str, project_id: str, inputs: dict = None) -> str:
+        """Create a skill execution record. Auto-creates DB record for runtime skills."""
         db = SessionLocal()
         try:
+            # If skill_id_or_name is not a UUID, try to find or create the skill in DB
+            skill_record = db.query(Skill).filter(
+                (Skill.id == skill_id_or_name) | (Skill.name == skill_id_or_name)
+            ).first()
+
+            if not skill_record:
+                # Runtime skill — persist to DB
+                runtime = self.get(skill_id_or_name)
+                if runtime:
+                    skill_record = Skill(
+                        name=runtime["name"],
+                        title=runtime["title"],
+                        description=runtime.get("description", ""),
+                        category=runtime.get("category", "analysis"),
+                        icon=runtime.get("icon", "ExperimentOutlined"),
+                        definition=runtime.get("definition", {}),
+                        version=runtime.get("version", "1.0.0"),
+                        is_builtin=runtime.get("is_builtin", True),
+                    )
+                    db.add(skill_record)
+                    db.flush()
+
+            if not skill_record:
+                raise ValueError(f"Skill '{skill_id_or_name}' not found")
+
             execution = SkillExecution(
-                skill_id=skill_id,
+                skill_id=skill_record.id,
                 project_id=project_id,
                 status="running",
                 inputs=inputs or {},
@@ -86,7 +111,6 @@ class SkillRegistry:
             )
             db.add(execution)
             db.commit()
-            db.refresh(execution)
             return execution.id
         finally:
             db.close()
