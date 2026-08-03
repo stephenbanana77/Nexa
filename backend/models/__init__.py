@@ -2,6 +2,7 @@ from .user import User, ApiKey
 from .project import Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell
 from .skill import Skill, SkillExecution
 from .resource import Resource, ResourceReference, ResourceType
+from .run import Run, RunStep
 
 __all__ = [
     "User", "ApiKey",
@@ -9,4 +10,5 @@ __all__ = [
     "Notebook", "Cell",
     "Skill", "SkillExecution",
     "Resource", "ResourceReference", "ResourceType",
+    "Run", "RunStep",
 ]
