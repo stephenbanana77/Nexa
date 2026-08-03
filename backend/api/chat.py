@@ -127,7 +127,7 @@ async def chat_stream(
         # Send conversation_id in done event for frontend
         yield {
             "event": "conversation_created",
-            "data": json.dumps({"conversation_id": conv_id}),
+            "data": json.dumps({"event": "conversation_created", "conversation_id": conv_id}),
         }
 
     return EventSourceResponse(event_stream())
