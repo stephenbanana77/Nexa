@@ -229,7 +229,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   return (
     <div style={{ height: "calc(100vh - 130px)", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontSize: 11, color: "#666" }}>
+        <span style={{ fontSize: 14, color: "#666" }}>
           {conversationId ? "Continue conversation" : "New conversation"}
         </span>
         {messages.length > 0 && (
@@ -251,7 +251,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
         {messages.length === 0 && !loading && (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <p style={{ color: "#aaa", fontSize: 15, margin: 0 }}>Ask a question about your data</p>
-            <p style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
+            <p style={{ color: "#666", fontSize: 14, marginTop: 4 }}>
               Example: "What is the total sales by region?"
             </p>
           </div>
@@ -271,7 +271,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 {/* Inline ECharts */}
                 {msg.charts && msg.charts.length > 0 && msg.charts.map((chart, ci) => (
                   <div key={ci} style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 11, color: "#666", marginBottom: 4, textTransform: "uppercase" }}>
+                    <div style={{ fontSize: 14, color: "#666", marginBottom: 4, textTransform: "uppercase" }}>
                       {chart.title}
                     </div>
                     <div style={{
@@ -297,7 +297,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                       background: "#0d0d0d",
                       padding: 10,
                       borderRadius: 6,
-                      fontSize: 12,
+                      fontSize: 14,
                       overflow: "auto",
                       color: "#60a5fa",
                     }}
@@ -307,11 +307,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 )}
                 {msg.rows && msg.columns && msg.rows.length > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, color: "#888", marginBottom: 6 }}>
                       Results ({msg.rows.length} of {msg.row_count} rows)
                     </div>
                     <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                         <thead>
                           <tr>
                             {msg.columns.map((col: string) => (

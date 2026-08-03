@@ -77,7 +77,7 @@ export default function HomePage() {
               styles={{ body: { padding: 20 } }}
             >
               <div style={{ fontWeight: 500, fontSize: 15, color: "#ddd", marginBottom: 4 }}>{p.name}</div>
-              <div style={{ fontSize: 12, color: "#888" }}>
+              <div style={{ fontSize: 14, color: "#888" }}>
                 Created {new Date(p.created_at).toLocaleDateString()}
               </div>
             </Card>
@@ -97,7 +97,7 @@ export default function HomePage() {
             styles={{ body: { padding: 20, width: "100%", textAlign: "center" } }}
           >
             <PlusOutlined style={{ fontSize: 24, color: "#555" }} />
-            <div style={{ color: "#666", marginTop: 8, fontSize: 13 }}>Create Project</div>
+            <div style={{ color: "#666", marginTop: 8, fontSize: 14 }}>Create Project</div>
           </Card>
         </div>
       </div>

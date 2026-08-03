@@ -51,7 +51,7 @@ export default function SkillCard({ skill, onRun }: Props) {
         <div style={{ fontSize: tokens.fontSize.lg, fontWeight: 600, color: tokens.color.text.primary }}>
           {skill.title}
         </div>
-        <Tag color={catColor} style={{ marginTop: 4, fontSize: 10 }}>
+        <Tag color={catColor} style={{ marginTop: 4, fontSize: 11 }}>
           {skill.category}
         </Tag>
       </div>

@@ -63,7 +63,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
       <div style={{ padding: "60px 20px", textAlign: "center" }}>
         <BulbOutlined style={{ fontSize: 36, color: "#444" }} />
         <p style={{ color: "#888", marginTop: 12, fontSize: 14 }}>No insights yet</p>
-        <p style={{ color: "#666", fontSize: 13 }}>Ask a question in Chat, then save the result here</p>
+        <p style={{ color: "#666", fontSize: 14 }}>Ask a question in Chat, then save the result here</p>
       </div>
     );
   }
@@ -85,10 +85,10 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
               <div style={{ fontWeight: 500, color: "#ddd", fontSize: 14, marginBottom: 4 }}>
                 {insight.question}
               </div>
-              <div style={{ color: "#aaa", fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}>
+              <div style={{ color: "#aaa", fontSize: 14, lineHeight: 1.5, marginBottom: 8 }}>
                 {insight.content.summary?.slice(0, 150)}...
               </div>
-              <div style={{ fontSize: 11, color: "#666" }}>
+              <div style={{ fontSize: 14, color: "#666" }}>
                 {new Date(insight.created_at).toLocaleString()}
                 {insight.content.row_count && ` · ${insight.content.row_count} rows`}
               </div>
@@ -117,10 +117,10 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
               {/* Key findings */}
               {insight.content.key_findings && insight.content.key_findings.length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ color: "#aaa", fontSize: 11, marginBottom: 6, textTransform: "uppercase" }}>
+                  <div style={{ color: "#aaa", fontSize: 14, marginBottom: 6, textTransform: "uppercase" }}>
                     Key Findings
                   </div>
-                  <ul style={{ margin: 0, paddingLeft: 18, color: "#ccc", fontSize: 13, lineHeight: 1.7 }}>
+                  <ul style={{ margin: 0, paddingLeft: 18, color: "#ccc", fontSize: 14, lineHeight: 1.7 }}>
                     {insight.content.key_findings.map((f, i) => (
                       <li key={i}>{f}</li>
                     ))}
@@ -135,7 +135,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
                   background: "#0d0d0d",
                   padding: 10,
                   borderRadius: 6,
-                  fontSize: 12,
+                  fontSize: 14,
                   color: "#60a5fa",
                   overflow: "auto",
                 }}>
@@ -148,7 +148,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
                 <div style={{ marginTop: 16 }}>
                   {insight.content.charts.map((chart, ci) => (
                     <div key={ci} style={{ marginBottom: 16 }}>
-                      <div style={{ color: "#aaa", fontSize: 11, marginBottom: 6, textTransform: "uppercase" }}>
+                      <div style={{ color: "#aaa", fontSize: 14, marginBottom: 6, textTransform: "uppercase" }}>
                         {chart.title}
                       </div>
                       <ReactECharts
@@ -165,7 +165,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
               {/* Tables */}
               {insight.content.tables && insight.content.tables.length > 0 && insight.content.tables.map((table, ti) => (
                 <div key={ti} style={{ marginTop: 12, overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                     <thead>
                       <tr>
                         {table.columns.map((col: string) => (

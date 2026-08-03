@@ -186,7 +186,7 @@ export default function RunHistoryPage() {
                       {step.chart_config && (
                         <ReactECharts
                           option={step.chart_config as Record<string, unknown>}
-                          style={{ height: 80, width: 120 }}
+                          style={{ height: 120, width: 200 }}
                           theme="dark"
                           notMerge
                         />

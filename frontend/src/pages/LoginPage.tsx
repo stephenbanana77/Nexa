@@ -36,7 +36,7 @@ export default function LoginPage() {
       }}
     >
       <Card
-        style={{ width: 400, background: "#1a1a1a", border: "1px solid #333" }}
+        style={{ width: "100%", maxWidth: 420, background: "#1a1a1a", border: "1px solid #333" }}
         styles={{ body: { padding: 32 } }}
       >
         <div style={{ textAlign: "center", marginBottom: 24 }}>

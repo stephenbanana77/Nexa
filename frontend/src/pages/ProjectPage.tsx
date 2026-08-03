@@ -140,14 +140,14 @@ export default function ProjectPage() {
               </div>
               {datasets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <span style={{ color: "#888", fontSize: 12, marginRight: 8 }}>Dataset:</span>
+                  <span style={{ color: "#888", fontSize: 14, marginRight: 8 }}>Dataset:</span>
                   <Select
                     value={selectedDatasetId}
                     onChange={(val) => {
                       setSelectedDatasetId(val);
                       setPreviewData(null);
                     }}
-                    style={{ width: 280 }}
+                    style={{ minWidth: 240, width: "100%" }}
                     options={datasets.map((d) => ({ label: d.name, value: d.id }))}
                   />
                 </div>
@@ -156,16 +156,16 @@ export default function ProjectPage() {
                 <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
                   {[{ label: "Dataset", value: selectedDataset.name }, { label: "Rows", value: selectedDataset.row_count.toLocaleString() }, { label: "Columns", value: selectedDataset.column_count }].map((m) => (
                     <div key={m.label} style={{ background: "#1f1f1f", borderRadius: 8, padding: "12px 18px", flex: 1 }}>
-                      <div style={{ fontSize: 11, color: "#666" }}>{m.label}</div>
+                      <div style={{ fontSize: 14, color: "#666" }}>{m.label}</div>
                       <div style={{ fontSize: 15, fontWeight: 500, color: "#ddd" }}>{m.value}</div>
                     </div>))}
                 </div>
                 {selectedDataset.schema_info && <>
-                  <div style={{ color: "#aaa", fontSize: 13, marginBottom: 8 }}>Schema</div>
+                  <div style={{ color: "#aaa", fontSize: 14, marginBottom: 8 }}>Schema</div>
                   <Table columns={schemaColumns} dataSource={selectedDataset.schema_info.map((s, i) => ({ ...s, key: i }))} pagination={false} size="small" />
                 </>}
                 {previewData && <>
-                  <div style={{ color: "#aaa", fontSize: 13, margin: "20px 0 8px" }}>Preview (first 1,000 of {selectedDataset.row_count.toLocaleString()} rows)</div>
+                  <div style={{ color: "#aaa", fontSize: 14, margin: "20px 0 8px" }}>Preview (first 1,000 of {selectedDataset.row_count.toLocaleString()} rows)</div>
                   <div className="ag-theme-alpine-dark" style={{ height: 400, width: "100%", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
                     <AgGridReact columnDefs={gridColumns} rowData={gridRows} rowHeight={32} headerHeight={36} suppressCellFocus />
                   </div>

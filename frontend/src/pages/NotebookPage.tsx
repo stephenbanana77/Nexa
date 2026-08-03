@@ -124,7 +124,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 14,
                   color: "#888",
                   background: "#252525",
                   padding: "1px 6px",
@@ -135,7 +135,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                   {cell.cell_type}
                 </span>
                 {cell.cell_type === "markdown" && (
-                  <Button size="small" type="text" onClick={() => toggleEdit(cell.id)} style={{ color: "#888", fontSize: 11 }}>
+                  <Button size="small" type="text" onClick={() => toggleEdit(cell.id)} style={{ color: "#888", fontSize: 14 }}>
                     {isEditing ? "Preview" : "Edit"}
                   </Button>
                 )}
@@ -174,7 +174,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
 
             {/* Content: edit mode or preview */}
             {cell.cell_type === "markdown" && !isEditing ? (
-              <div style={{ color: "#ccc", fontSize: 13, lineHeight: 1.6, padding: "4px 0" }}>
+              <div style={{ color: "#ccc", fontSize: 14, lineHeight: 1.6, padding: "4px 0" }}>
                 <ReactMarkdown>{cell.content || "*Empty cell*"}</ReactMarkdown>
               </div>
             ) : (
@@ -193,7 +193,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                   borderRadius: 4,
                   padding: 8,
                   fontFamily: cell.cell_type === "markdown" ? "inherit" : "monospace",
-                  fontSize: 13,
+                  fontSize: 14,
                   resize: "vertical",
                   lineHeight: 1.6,
                 }}
@@ -210,10 +210,10 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             {/* SQL Results */}
             {sqlResults[cell.id] && (
               <div style={{ marginTop: 8, overflowX: "auto" }}>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>
+                <div style={{ fontSize: 14, color: "#666", marginBottom: 4 }}>
                   {sqlResults[cell.id].row_count != null ? `${sqlResults[cell.id].row_count} rows` : ""}
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                   <thead>
                     <tr>
                       {(sqlResults[cell.id].columns || []).map((col: string) => (
@@ -245,7 +245,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                   background: "#0d0d0d",
                   padding: 10,
                   borderRadius: 6,
-                  fontSize: 12,
+                  fontSize: 14,
                   color: "#a78bfa",
                   overflow: "auto",
                   maxHeight: 300,
