@@ -96,12 +96,16 @@ _agent_graph = build_agent_graph()
 
 async def run_agent(project_id: str, question: str, history: list[dict] = None) -> AsyncGenerator[dict[str, Any], None]:
     """Run the LangGraph agent and yield streaming events."""
+    from agents.sanitizer import sanitize_user_input, sanitize_schema
+
+    clean_question, was_flagged = sanitize_user_input(question)
     schema = get_schema_context(project_id)
+    schema = sanitize_schema(schema)
 
     initial_state: AgentState = {
         "messages": [],
         "project_id": project_id,
-        "question": question,
+        "question": clean_question,
         "schema": schema,
         "conversation_history": history or [],
         "plan": [],
