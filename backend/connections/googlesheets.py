@@ -54,12 +54,13 @@ class GoogleSheetsConnector(DataSourceEngine):
     def get_schema(self, table: str = None) -> list[dict]:
         df = self._load()
         return [
-            {"name": col, "type": str(df[col].dtype), "nullable": bool(df[col].isna().any())}
+            {"name": col, "type": str(df[col].dtype), "nullable": bool(df[col].isna().any()),
+             "missing_count": int(df[col].isna().sum()), "missing_pct": round(df[col].isna().mean() * 100, 1)}
             for col in df.columns
         ]
 
-    def get_tables(self) -> list[str]:
-        return [self._table_name]
+    def get_tables(self) -> list[dict]:
+        return [{"name": self._table_name, "row_count": len(self._df)}]
 
     def health_check(self) -> bool:
         try:

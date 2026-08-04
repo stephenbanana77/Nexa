@@ -128,3 +128,38 @@ def add_cell(
     db.commit()
     db.refresh(cell)
     return {"id": cell.id, "cell_type": cell.cell_type, "content": cell.content, "sort_order": cell.sort_order}
+
+
+@router.delete("/cells/{cell_id}")
+def delete_cell(cell_id: str, db: Session = Depends(get_db)):
+    cell = db.query(Cell).filter(Cell.id == cell_id).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    db.delete(cell)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/cells/{cell_id}/execute")
+def execute_python_cell(cell_id: str, db: Session = Depends(get_db)):
+    """Execute a Python cell and return the result."""
+    cell = db.query(Cell).filter(Cell.id == cell_id).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    if cell.cell_type != "python":
+        raise HTTPException(status_code=400, detail="Only Python cells can be executed")
+
+    import sys, io
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    result = None
+    error = None
+    try:
+        exec(cell.content, {"__builtins__": __builtins__})
+        result = sys.stdout.getvalue()
+    except Exception as e:
+        error = str(e)
+    finally:
+        sys.stdout = old_stdout
+
+    return {"output": result, "error": error}

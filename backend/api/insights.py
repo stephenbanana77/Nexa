@@ -97,3 +97,17 @@ def list_insights(
         }
         for i in insights
     ]
+
+
+@router.delete("/{insight_id}")
+def delete_insight(
+    insight_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    insight = db.query(Insight).filter(Insight.id == insight_id).first()
+    if not insight:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    db.delete(insight)
+    db.commit()
+    return {"ok": True}

@@ -85,6 +85,8 @@ export default function WorkflowEditPage() {
     setSaving(true);
     try {
       await api.put(`/api/workflows/${workflowId}`, {
+        name: workflow?.name || '',
+        description: workflow?.description || '',
         steps: steps.map((s, i) => ({
           sort_order: i,
           type: s.type,

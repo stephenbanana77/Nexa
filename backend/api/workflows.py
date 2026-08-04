@@ -29,6 +29,32 @@ class WorkflowUpdate(BaseModel):
     steps: list[dict] | None = None
 
 
+@router.get("/detail/{workflow_id}")
+def get_workflow(workflow_id: str, db: Session = Depends(get_db)):
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return {
+        "id": wf.id,
+        "name": wf.name,
+        "description": wf.description,
+        "project_id": wf.project_id,
+        "status": wf.status,
+        "steps": [
+            {
+                "id": s.id,
+                "sort_order": s.sort_order,
+                "type": s.type,
+                "config": s.config,
+                "input_refs": s.input_refs,
+                "output_ref": s.output_ref,
+                "description": s.description,
+            }
+            for s in (wf.steps or [])
+        ],
+    }
+
+
 @router.get("/{project_id}")
 def list_workflows(
     project_id: str,

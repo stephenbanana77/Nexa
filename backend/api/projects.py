@@ -105,15 +105,23 @@ async def upload_dataset(
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    if ext == ".csv":
-        # Auto-detect encoding (Kaggle datasets often use non-UTF-8)
-        import chardet
-        with open(file_path, "rb") as raw:
-            result = chardet.detect(raw.read(100000))
-        encoding = result["encoding"] or "utf-8"
-        df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
-    else:
-        df = pd.read_excel(file_path)
+    try:
+        if ext == ".csv":
+            # Auto-detect encoding (Kaggle datasets often use non-UTF-8)
+            import chardet
+            with open(file_path, "rb") as raw:
+                result = chardet.detect(raw.read(100000))
+            encoding = result["encoding"] or "utf-8"
+            df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
+        else:
+            df = pd.read_excel(file_path)
+    except Exception as e:
+        # Clean up the saved file on parse failure
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
     schema_info = []
     for col in df.columns:

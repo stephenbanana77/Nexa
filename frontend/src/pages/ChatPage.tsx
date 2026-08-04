@@ -143,6 +143,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 setConversationId(data.conversation_id);
               } else if (eventName === "done") {
                 setShowProgress(false);
+              } else if (eventName === "retry") {
+                // Reset stages for retry attempt
+                resetStages();
+                setShowProgress(true);
+                setLoading(true);
               } else if (eventName === "error") {
                 setShowProgress(false);
                 message.error(data.message || "Analysis failed");
