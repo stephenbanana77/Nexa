@@ -21,6 +21,13 @@ def route_after_plan(state: AgentState) -> str:
     return "select_skill"
 
 
+def route_after_plan(state: AgentState) -> str:
+    """After planning: go to compose if capability denied, otherwise select_skill."""
+    if state.get("capability_denied"):
+        return "compose"
+    return "select_skill"
+
+
 def route_after_select(state: AgentState) -> str:
     """After skill selection, route to skill execution or normal SQL flow."""
     return state.get("next_action", "generate_sql")
@@ -50,8 +57,12 @@ def build_agent_graph() -> StateGraph:
     workflow.set_entry_point("understand")
     workflow.add_edge("understand", "plan")
 
-    # plan → select_skill (AI decides if skill matches)
-    workflow.add_edge("plan", "select_skill")
+    # plan → select_skill (AI decides if skill matches) or compose (capability denied)
+    workflow.add_conditional_edges(
+        "plan",
+        route_after_plan,
+        {"select_skill": "select_skill", "compose": "compose"}
+    )
 
     # select_skill → execute_skill (if matched) or generate_sql (fallback)
     workflow.add_conditional_edges(

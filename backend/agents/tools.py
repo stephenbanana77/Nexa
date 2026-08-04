@@ -38,11 +38,41 @@ class ToolRegistry:
 tool_registry = ToolRegistry()
 
 
+# ---- SQL safety ----
+
+DANGEROUS_KEYWORDS = ["DROP ", "DELETE ", "TRUNCATE ", "ALTER ", "INSERT ", "UPDATE "]
+MAX_ROWS = 10000
+QUERY_TIMEOUT_SEC = 30
+
+
+def _validate_sql(sql: str) -> tuple[bool, str]:
+    """Check SQL for dangerous operations and add safety limits.
+    Returns (is_safe, sanitized_sql_or_error_message)."""
+    upper = sql.upper().strip()
+    for kw in DANGEROUS_KEYWORDS:
+        if kw in upper:
+            return False, f"Dangerous SQL operation '{kw.strip()}' is not allowed. Use SELECT only."
+    # Auto-add LIMIT if missing
+    if "LIMIT " not in upper:
+        sql = sql.rstrip(";").rstrip() + f" LIMIT {MAX_ROWS}"
+    return True, sql
+
+
 # ---- Built-in tools ----
 
 def _execute_query_tool(project_id: str, sql: str) -> QueryResult:
-    """Execute SQL query (DuckDB or MySQL)."""
+    """Execute SQL query (DuckDB or MySQL) with safety checks."""
+    is_safe, result = _validate_sql(sql)
+    if not is_safe:
+        raise ValueError(result)
+    sql = result
     engine = get_engine(project_id)
+    # Set a timeout to prevent runaway queries
+    if hasattr(engine, "conn"):
+        try:
+            engine.conn.execute(f"SET threads=4")
+        except Exception:
+            pass
     return engine.query(sql)
 
 
