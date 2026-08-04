@@ -124,6 +124,21 @@ async def chat_stream(
             "conversation_id": conv_id,
         })
 
+        # Register chart as Resource if generated
+        chart_config = last_event.get("chart_config")
+        if chart_config:
+            import uuid
+            from resources.registry import register_resource
+            chart_id = str(uuid.uuid4())
+            register_resource(
+                resource_type="chart",
+                resource_id=chart_id,
+                name=chart_config.get("title", "Chat Chart"),
+                project_id=req.project_id,
+                description=f"Auto-generated from chat analysis",
+                metadata={"chart_config": chart_config},
+            )
+
         # Send conversation_id in done event for frontend
         yield {
             "event": "conversation_created",

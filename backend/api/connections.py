@@ -9,6 +9,7 @@ from models.project import Project
 from services.auth import get_current_user
 from tools.query_engine import engine_registry
 from connections.postgresql import PostgreSQLConnector
+from connections.googlesheets import GoogleSheetsConnector
 from resources.registry import register_resource
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
@@ -17,12 +18,13 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 class ConnectionCreate(BaseModel):
     project_id: str
     name: str
-    engine: str  # "postgresql" | "mysql"
-    host: str
+    engine: str  # "postgresql" | "mysql" | "googlesheets"
+    host: str = ""
     port: int = 5432
-    user: str
-    password: str
-    database: str
+    user: str = ""
+    password: str = ""
+    database: str = ""
+    sheet_url: str = ""
 
 
 @router.post("")
@@ -49,13 +51,20 @@ def create_connection(
         from tools import register_mysql, get_engine
         register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)
         connector = get_engine(req.project_id)
+    elif req.engine == "googlesheets":
+        if not req.sheet_url:
+            raise HTTPException(status_code=400, detail="sheet_url is required for Google Sheets")
+        connector = GoogleSheetsConnector(sheet_url=req.sheet_url)
+        if not connector.health_check():
+            raise HTTPException(status_code=400, detail="Failed to load Google Sheet")
+        engine_registry.register(req.project_id, connector)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown engine: {req.engine}")
 
     tables = connector.get_tables()
 
     # Register as Resource
-    conn_id = f"conn-{req.engine}-{req.host}-{req.database}"
+    conn_id = f"conn-{req.engine}-{req.host or 'gsheets'}-{req.database or 'sheet'}"
     resource = register_resource(
         resource_type="connection",
         resource_id=conn_id,

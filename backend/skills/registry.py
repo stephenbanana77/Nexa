@@ -155,6 +155,47 @@ class SkillRegistry:
         finally:
             db.close()
 
+    def check_permissions(self, skill_name: str, context: dict = None) -> tuple[bool, str]:
+        """Enforce skill permissions before execution.
+        Returns (allowed, reason)."""
+        skill = self.get(skill_name)
+        if not skill:
+            return False, f"Skill '{skill_name}' not found"
+
+        perms = skill.get("permissions", {})
+        if not perms:
+            return True, "No permissions declared"
+
+        context = context or {}
+
+        # Check agent_callable — non-agent-callable skills cannot be triggered by LLM
+        if not skill.get("agent_callable", True):
+            return False, f"Skill '{skill_name}' is not callable by the AI agent"
+
+        # Check read permissions
+        if perms.get("read"):
+            available = context.get("available_resources", [])
+            for req in perms["read"]:
+                if req not in available:
+                    return False, f"Skill '{skill_name}' requires read access to '{req}' which is not available"
+
+        # Check write permissions
+        if perms.get("write"):
+            allowed_writes = context.get("allowed_writes", [])
+            for req in perms["write"]:
+                if req not in allowed_writes:
+                    return False, f"Skill '{skill_name}' requires write access to '{req}' which is not allowed"
+
+        # Check network permission
+        if perms.get("network") and not context.get("network_allowed", False):
+            return False, f"Skill '{skill_name}' requires network access which is not available"
+
+        # Check LLM permission
+        if perms.get("llm") and not context.get("llm_available", True):
+            return False, f"Skill '{skill_name}' requires LLM which is not available"
+
+        return True, "ok"
+
 
 # Singleton
 skill_registry = SkillRegistry()

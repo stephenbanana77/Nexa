@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button, Card, Tag, Modal, Input, Spin, Empty, message, Steps } from "antd";
 import { PlusOutlined, PlayCircleOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { api } from "../services";
@@ -22,6 +22,7 @@ const stepLabels: Record<string, string> = {
 
 export default function WorkflowPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModal, setCreateModal] = useState(false);
@@ -133,7 +134,7 @@ export default function WorkflowPage() {
                   {wf.status}
                 </Tag>
                 <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>Run</Button>
-                <Button size="small" icon={<EditOutlined />} />
+                <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} />
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(wf.id)} />
               </div>
             </Card>

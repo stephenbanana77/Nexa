@@ -61,6 +61,15 @@ async def execute_skill_node(state: AgentState) -> dict:
     if not skill:
         return {"summary": f"Skill '{skill_name}' not found.", "next_action": "compose"}
 
+    # Enforce permissions
+    allowed, reason = skill_registry.check_permissions(skill_name, {
+        "available_resources": ["schema", "data"],
+        "allowed_writes": ["insight", "chart"],
+        "llm_available": True,
+    })
+    if not allowed:
+        return {"summary": reason, "next_action": "compose"}
+
     # Run the skill and accumulate results
     steps_output = []
     sql = ""
