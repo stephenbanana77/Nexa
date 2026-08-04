@@ -24,12 +24,12 @@ def global_search(
     projects = (
         db.query(Project)
         .filter(Project.user_id == current_user.id)
-        .filter(or_(Project.name.ilike(f"%{q}%"), Project.description.ilike(f"%{q}%")))
+        .filter(Project.name.ilike(f"%{q}%"))
         .limit(5)
         .all()
     )
     for p in projects:
-        results.append({"type": "project", "id": p.id, "title": p.name, "subtitle": p.description or "", "link": f"/project/{p.id}"})
+        results.append({"type": "project", "id": p.id, "title": p.name, "subtitle": "", "link": f"/project/{p.id}"})
 
     # Datasets
     datasets = (

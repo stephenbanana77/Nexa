@@ -34,3 +34,4 @@ class AgentState(TypedDict):
 
     # Flow control
     next_action: str  # "generate_sql" | "execute" | "analyze" | "visualize" | "compose" | "end" | "select_skill" | "execute_skill"
+    capability_denied: bool

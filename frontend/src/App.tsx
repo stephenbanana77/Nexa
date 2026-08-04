@@ -8,6 +8,7 @@ import ProjectPage from "./pages/ProjectPage";
 import SkillsPage from "./pages/SkillsPage";
 import WorkflowEditPage from "./pages/WorkflowEditPage";
 import DashboardPage from "./pages/DashboardPage";
+import ResourcesPage from "./pages/ResourcesPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -76,6 +77,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/project/:projectId/resources"
+              element={
+                <ProtectedRoute>
+                  <ResourcesPage />
                 </ProtectedRoute>
               }
             />

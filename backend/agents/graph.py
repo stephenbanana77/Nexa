@@ -17,11 +17,6 @@ from agents.context import get_schema_context
 
 
 def route_after_plan(state: AgentState) -> str:
-    """After planning, check if a skill should be used."""
-    return "select_skill"
-
-
-def route_after_plan(state: AgentState) -> str:
     """After planning: go to compose if capability denied, otherwise select_skill."""
     if state.get("capability_denied"):
         return "compose"

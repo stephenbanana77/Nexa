@@ -18,13 +18,14 @@ class AgentController:
         self.project_id = project_id
         self.question = user_question
         self.history = history or []
-        self.tracker = RunTracker(run_type="chat", project_id=project_id, created_by=user_id)
+        self._user_id = user_id
 
     async def run(self) -> AsyncGenerator[dict, None]:
         """Run the LangGraph agent pipeline with auto-retry on failure."""
         last_error = None
 
         for attempt in range(MAX_RETRIES + 1):
+            self.tracker = RunTracker(run_type="chat", project_id=self.project_id, created_by=self._user_id)
             self.tracker.start()
             tracker = self.tracker
             step_ids: dict[str, str] = {}
