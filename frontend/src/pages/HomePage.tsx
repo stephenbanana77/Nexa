@@ -65,7 +65,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <h2 style={{ color: "#aaa", fontSize: 14, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>
+        <h2 style={{ color: "#aaa", fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
           {projects.map((p) => (
@@ -76,8 +76,8 @@ export default function HomePage() {
               style={{ background: "#1a1a1a", border: "1px solid #333", cursor: "pointer" }}
               styles={{ body: { padding: 20 } }}
             >
-              <div style={{ fontWeight: 500, fontSize: 15, color: "#ddd", marginBottom: 4 }}>{p.name}</div>
-              <div style={{ fontSize: 14, color: "#888" }}>
+              <div style={{ fontWeight: 500, fontSize: 17, color: "#ddd", marginBottom: 4 }}>{p.name}</div>
+              <div style={{ fontSize: 16, color: "#888" }}>
                 Created {new Date(p.created_at).toLocaleDateString()}
               </div>
             </Card>
@@ -97,7 +97,7 @@ export default function HomePage() {
             styles={{ body: { padding: 20, width: "100%", textAlign: "center" } }}
           >
             <PlusOutlined style={{ fontSize: 24, color: "#555" }} />
-            <div style={{ color: "#666", marginTop: 8, fontSize: 14 }}>Create Project</div>
+            <div style={{ color: "#666", marginTop: 8, fontSize: 16 }}>Create Project</div>
           </Card>
         </div>
       </div>

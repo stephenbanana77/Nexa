@@ -39,9 +39,9 @@ export default function LoginPage() {
         style={{ width: "100%", maxWidth: 420, background: "#1a1a1a", border: "1px solid #333" }}
         styles={{ body: { padding: 32 } }}
       >
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600, color: "#fff", margin: 0 }}>Nexa</h1>
-          <p style={{ color: "#888", margin: "4px 0 0" }}>Your AI Data Analyst</p>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, color: "#fff", margin: 0 }}>Nexa</h1>
+          <p style={{ color: "#888", margin: "8px 0 0", fontSize: 18 }}>Your AI Data Analyst</p>
         </div>
         <Tabs
           centered

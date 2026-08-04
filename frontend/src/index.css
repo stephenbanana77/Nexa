@@ -4,11 +4,15 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 20px;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: #0d0d0d;
   color: #ddd;
-  font-size: 18px;
+  font-size: 20px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -25,34 +29,68 @@ body {
   border-radius: 3px;
 }
 
-/* Ant Design global font overrides */
+/* Ant Design aggressive font-size override */
 .ant-tabs-tab,
+.ant-tabs-tab-btn,
+.ant-tabs-tabpane,
 .ant-btn,
+.ant-btn span,
 .ant-input,
+.ant-input::placeholder,
+.ant-input-affix-wrapper,
 .ant-select,
+.ant-select-selector,
+.ant-select-item,
 .ant-tag,
 .ant-breadcrumb,
 .ant-empty-description,
 .ant-table,
+.ant-table-cell,
 .ant-card,
-.ant-typography {
-  font-size: inherit !important;
+.ant-card-body,
+.ant-typography,
+.ant-form,
+.ant-form-item,
+.ant-form-item-label,
+.ant-form-item-label label,
+.ant-menu-item,
+.ant-menu-title-content,
+.ant-modal-body,
+.ant-modal-header,
+.ant-steps-item-title,
+.ant-steps-item-description,
+.ant-alert-message,
+.ant-alert-description,
+.ant-message-custom-content,
+.ant-popover-inner-content,
+.ant-dropdown-menu-item,
+.ant-pagination-item,
+.ant-pagination-item-link {
+  font-size: 18px !important;
 }
 
 .ant-tabs-tab-btn {
-  font-size: 16px !important;
+  font-size: 18px !important;
 }
 
 .ant-btn {
-  font-size: 15px !important;
+  font-size: 18px !important;
 }
 
 .ant-tag {
-  font-size: 13px !important;
+  font-size: 15px !important;
 }
 
 .ant-empty-description {
-  font-size: 15px !important;
+  font-size: 18px !important;
+}
+
+.ant-input::placeholder {
+  font-size: 18px !important;
+}
+
+.ant-form-item-label label {
+  font-size: 18px !important;
 }
 
 /* ag-grid dark theme overrides */
@@ -62,7 +100,7 @@ body {
   --ag-odd-row-background-color: #1a1a1a;
   --ag-row-hover-color: #242424;
   --ag-border-color: #333;
-  --ag-font-size: 16px;
+  --ag-font-size: 18px;
   --ag-font-family: inherit;
   --ag-foreground-color: #ccc;
   --ag-header-foreground-color: #888;
