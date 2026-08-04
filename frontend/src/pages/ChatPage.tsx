@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Input, message } from "antd";
-import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined } from "@ant-design/icons";
+import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined, DownloadOutlined, CopyOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import ReactECharts from "echarts-for-react";
 import api from "../api/client";
@@ -395,6 +395,25 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 >
                   Dashboard
                 </Button>
+                {msg.rows && msg.rows.length > 0 && (
+                  <Button
+                    type="text" size="small" icon={<DownloadOutlined />}
+                    onClick={() => {
+                      const csv = [msg.columns?.join(",") || "", ...msg.rows!.map((r: any[]) => r.join(","))].join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob); a.download = "export.csv"; a.click();
+                    }}
+                    style={{ marginTop: 8, color: "#888" }}
+                  >CSV</Button>
+                )}
+                {msg.content && (
+                  <Button
+                    type="text" size="small" icon={<CopyOutlined />}
+                    onClick={() => { navigator.clipboard.writeText(msg.content!); message.success("Copied!"); }}
+                    style={{ marginTop: 8, color: "#888" }}
+                  >Copy</Button>
+                )}
               </div>
             </div>
           )

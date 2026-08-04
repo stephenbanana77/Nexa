@@ -74,6 +74,51 @@ def get_project(
     )
 
 
+@router.post("/datasets/preview")
+async def preview_dataset(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Preview first 10 rows + schema without saving."""
+    ext = os.path.splitext(file.filename or "data.csv")[1].lower()
+    if ext not in [".csv", ".xlsx", ".xls"]:
+        raise HTTPException(status_code=400, detail="Unsupported file format")
+
+    import tempfile, contextlib
+    contents = await file.read()
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+    try:
+        tmp.write(contents)
+        tmp.close()
+
+        if ext == ".csv":
+            import chardet
+            with open(tmp.name, "rb") as raw:
+                result = chardet.detect(raw.read(100000))
+            encoding = result["encoding"] or "utf-8"
+            confidence = round(result.get("confidence", 0) * 100)
+            df = pd.read_csv(tmp.name, encoding=encoding, encoding_errors="replace", nrows=1000)
+        else:
+            encoding = "n/a"
+            confidence = 100
+            df = pd.read_excel(tmp.name, nrows=1000)
+
+        preview_rows = df.head(10).fillna("").values.tolist()
+        columns = [
+            {"name": col, "type": str(df[col].dtype),
+             "missing": int(df[col].isna().sum()), "missing_pct": round(df[col].isna().mean() * 100, 1)}
+            for col in df.columns
+        ]
+        return {
+            "file_name": file.filename, "file_size": len(contents),
+            "encoding": encoding, "encoding_confidence": confidence,
+            "columns": columns, "preview_rows": preview_rows, "total_rows_in_sample": len(df),
+        }
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp.name)
+
+
 @router.post("/datasets/upload")
 async def upload_dataset(
     project_id: str,

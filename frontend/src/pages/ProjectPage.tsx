@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Tabs, Upload, Button, Table, Select, message, Spin } from "antd";
+import { Tabs, Upload, Button, Table, Select, message, Spin, Modal } from "antd";
 import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
@@ -47,6 +47,9 @@ export default function ProjectPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState<any>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [mysqlModalOpen, setMysqlModalOpen] = useState(false);
 
@@ -66,17 +69,37 @@ export default function ProjectPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
+      // Preview first
+      const previewRes = await api.post("/api/datasets/preview", formData);
+      setUploadPreview(previewRes.data);
+      setPendingFile(file);
+      setPreviewModalOpen(true);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || "Preview failed");
+    } finally {
+      setUploading(false);
+    }
+    return false;
+  };
+
+  const confirmUpload = async () => {
+    if (!pendingFile) return;
+    setPreviewModalOpen(false);
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", pendingFile);
+    try {
       const { data } = await api.post(`/api/datasets/upload?project_id=${projectId}`, formData);
       setDatasets((prev) => [data, ...prev]);
       setSelectedDatasetId(data.id);
       if (data.preview) setPreviewData(data.preview);
-      message.success(`Uploaded: ${file.name}`);
+      message.success(`Uploaded: ${pendingFile.name}`);
+      setPendingFile(null);
     } catch (err: any) {
       message.error(err.response?.data?.detail || "Upload failed");
     } finally {
       setUploading(false);
     }
-    return false;
   };
 
   const loadPreview = async (datasetId: string) => {
@@ -199,6 +222,38 @@ export default function ProjectPage() {
           setSelectedDatasetId(data.id);
         }}
       />
+
+      <Modal
+        title="Confirm Upload"
+        open={previewModalOpen}
+        onCancel={() => { setPreviewModalOpen(false); setPendingFile(null); }}
+        onOk={confirmUpload}
+        okText="Upload"
+        width={700}
+        styles={{ body: { padding: 16, background: "#1a1a1a" } }}
+      >
+        {uploadPreview && (
+          <div>
+            <p style={{ color: "#888", marginBottom: 12 }}>
+              {uploadPreview.file_name} ({Math.round(uploadPreview.file_size / 1024)} KB)
+              &nbsp;· Encoding: {uploadPreview.encoding}
+              &nbsp;· {uploadPreview.columns?.length || 0} columns, {uploadPreview.total_rows_in_sample}+ rows
+            </p>
+            <Table
+              dataSource={uploadPreview.preview_rows?.slice(0, 10).map((r: any[], i: number) => {
+                const row: Record<string, any> = { _key: i };
+                uploadPreview.columns.forEach((c: any, j: number) => { row[c.name] = String(r[j] ?? "").slice(0, 50); });
+                return row;
+              }) || []}
+              columns={(uploadPreview.columns || []).map((c: any) => ({ title: c.name, dataIndex: c.name, key: c.name, ellipsis: true }))}
+              size="small"
+              pagination={false}
+              scroll={{ x: "max-content" }}
+              rowKey="_key"
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

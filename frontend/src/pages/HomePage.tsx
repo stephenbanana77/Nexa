@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Modal, Input, message } from "antd";
-import { PlusOutlined, LogoutOutlined } from "@ant-design/icons";
+import { Button, Card, Modal, Input, message, Tag } from "antd";
+import { PlusOutlined, LogoutOutlined, SearchOutlined } from "@ant-design/icons";
 import { useAuthStore } from "../stores/auth";
 import api from "../api/client";
 
@@ -18,6 +18,16 @@ export default function HomePage() {
   const [newName, setNewName] = useState("");
   const { logout } = useAuthStore();
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  const doSearch = async (q: string) => {
+    if (!q.trim()) { setSearchResults([]); return; }
+    try {
+      const { data } = await api.get(`/api/search?q=${encodeURIComponent(q)}`);
+      setSearchResults(data.results || []);
+    } catch { setSearchResults([]); }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -63,6 +73,40 @@ export default function HomePage() {
               Logout
             </Button>
           </div>
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <Input
+            prefix={<SearchOutlined style={{ color: "#888" }} />}
+            placeholder="Search projects, insights, datasets..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); doSearch(e.target.value); }}
+            allowClear
+            size="large"
+            style={{ background: "#1a1a1a", fontSize: 18 }}
+          />
+          {searchResults.length > 0 && (
+            <div style={{ marginTop: 12, background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: 8 }}>
+              {searchResults.map((r: any, i: number) => (
+                <div
+                  key={i}
+                  onClick={() => navigate(r.link)}
+                  style={{
+                    padding: "8px 12px", cursor: "pointer", borderRadius: 6,
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#252525")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <Tag color={r.type === "project" ? "blue" : r.type === "insight" ? "green" : r.type === "workflow" ? "orange" : "default"} style={{ margin: 0 }}>
+                    {r.type}
+                  </Tag>
+                  <span style={{ color: "#ddd", fontSize: 17 }}>{r.title}</span>
+                  {r.subtitle && <span style={{ color: "#888", fontSize: 15 }}>{r.subtitle}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <h2 style={{ color: "#aaa", fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>
