@@ -2,6 +2,11 @@ from agents.state import AgentState
 
 
 def compose_answer(state: AgentState) -> dict:
+    # Check if a summary was already set (e.g. capability denial)
+    existing = state.get("summary", "")
+    if existing:
+        return {"summary": existing, "next_action": "end"}
+
     analysis = state.get("analysis", "")
     error = state.get("sql_error", "")
 
