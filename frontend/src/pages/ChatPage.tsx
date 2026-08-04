@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button, Input, message } from "antd";
-import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined } from "@ant-design/icons";
+import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import ReactECharts from "echarts-for-react";
 import api from "../api/client";
@@ -46,6 +47,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
   const [showProgress, setShowProgress] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -379,6 +381,15 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 >
                   Save as Workflow
                 </Button>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ShareAltOutlined />}
+                  onClick={() => navigate(`/project/${projectId}/dashboard`)}
+                  style={{ marginTop: 8, color: "#888" }}
+                >
+                  Dashboard
+                </Button>
               </div>
             </div>
           )
@@ -410,6 +421,29 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
         <div ref={chatEndRef} />
       </div>
+
+      {messages.length === 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {[
+            { label: "Top 5 by sales", text: "各产品分类的销售额排名前5名" },
+            { label: "Sales trend", text: "按月展示销售额变化趋势" },
+            { label: "YOY comparison", text: "比较去年和今年的利润，做同比分析" },
+            { label: "Data overview", text: "给我一份数据集的整体概览" },
+            { label: "Correlation", text: "分析数值列之间的相关性" },
+            { label: "Top 10 & Bottom 10", text: "找出销售额最高和最低的10个订单" },
+          ].map((p) => (
+            <Button
+              key={p.label}
+              size="small"
+              type="default"
+              style={{ fontSize: 15 }}
+              onClick={() => { setInput(p.text); }}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div
         style={{
