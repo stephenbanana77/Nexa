@@ -148,7 +148,9 @@ async def upload_dataset(
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
     os.makedirs(settings.STORAGE_PATH, exist_ok=True)
-    file_path = os.path.join(settings.STORAGE_PATH, f"{project_id}_{file.filename}")
+    safe_name = "".join(c for c in file.filename if c.isalnum() or c in "._-")
+    safe_name = safe_name.strip(". ") or "upload"
+    file_path = os.path.join(settings.STORAGE_PATH, f"{project_id}_{safe_name}")
     contents = await file.read()
     with open(file_path, "wb") as f:
         f.write(contents)

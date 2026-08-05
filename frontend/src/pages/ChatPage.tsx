@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Input, message } from "antd";
+import { Button, Input, message, Select } from "antd";
 import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined, DownloadOutlined, CopyOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import ReactECharts from "echarts-for-react";
@@ -44,6 +44,17 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [datasets, setDatasets] = useState<{id: string; name: string}[]>([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
+      const list = data.items || data;
+      setDatasets(Array.isArray(list) ? list : []);
+      if (list.length > 0) setSelectedDatasetId(list[0].id);
+    }).catch(() => {});
+  }, [projectId]);
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
   const [showProgress, setShowProgress] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -81,7 +92,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
     try {
       const token = localStorage.getItem("nexa_token");
-      const body: any = { project_id: projectId, message: text };
+      const body: any = { project_id: projectId, message: text, dataset_id: selectedDatasetId || undefined };
       if (conversationId) body.conversation_id = conversationId;
 
       const response = await fetch("/api/chat/stream", {
@@ -399,7 +410,8 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                   <Button
                     type="text" size="small" icon={<DownloadOutlined />}
                     onClick={() => {
-                      const csv = [msg.columns?.join(",") || "", ...msg.rows!.map((r: any[]) => r.join(","))].join("\n");
+                      const escapeCsv = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+                      const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...msg.rows!.map((r: any[]) => r.map(escapeCsv).join(","))].join("\n");
                       const blob = new Blob([csv], { type: "text/csv" });
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(blob); a.download = "export.csv"; a.click();
@@ -413,6 +425,18 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                     onClick={() => { navigator.clipboard.writeText(msg.content!); message.success("Copied!"); }}
                     style={{ marginTop: 8, color: "#888" }}
                   >Copy</Button>
+                )}
+                {msg.content && (
+                  <Button
+                    type="text" size="small" icon={<DownloadOutlined />}
+                    onClick={() => {
+                      const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.sql ? "```sql\n" + msg.sql + "\n```" : ""}`;
+                      const blob = new Blob([md], { type: "text/markdown" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob); a.download = "analysis.md"; a.click();
+                    }}
+                    style={{ marginTop: 8, color: "#888" }}
+                  >MD</Button>
                 )}
               </div>
             </div>
@@ -477,6 +501,17 @@ export default function ChatPage({ projectId }: { projectId: string }) {
           gap: 8,
         }}
       >
+        {datasets.length > 1 && (
+          <div style={{ marginBottom: 8 }}>
+            <Select
+              value={selectedDatasetId}
+              onChange={setSelectedDatasetId}
+              style={{ minWidth: 200, background: "#1a1a1a" }}
+              options={datasets.map((d) => ({ value: d.id, label: d.name }))}
+              size="small"
+            />
+          </div>
+        )}
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}

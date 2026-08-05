@@ -108,6 +108,9 @@ def delete_insight(
     insight = db.query(Insight).filter(Insight.id == insight_id).first()
     if not insight:
         raise HTTPException(status_code=404, detail="Insight not found")
+    # Verify ownership
+    if insight.project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     db.delete(insight)
     db.commit()
     return {"ok": True}

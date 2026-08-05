@@ -21,6 +21,23 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
+  const createSampleProject = async () => {
+    setLoading(true);
+    try {
+      const proj = await api.post("/api/projects", { name: "Sample - Superstore" });
+      const pid = proj.data.id;
+      // Use a small built-in CSV for demo
+      const csv = "Category,Sales,Profit\nFurniture,10000,2000\nOffice Supplies,15000,3500\nTechnology,25000,8000";
+      const blob = new Blob([csv], { type: "text/csv" });
+      const form = new FormData();
+      form.append("file", blob, "superstore_sample.csv");
+      await api.post(`/api/datasets/upload?project_id=${pid}`, form);
+      message.success("Sample project created! Try asking: 'Show sales by category'");
+      navigate(`/project/${pid}`);
+    } catch { message.error("Failed to create sample project"); }
+    finally { setLoading(false); }
+  };
+
   const doSearch = async (q: string) => {
     if (!q.trim()) { setSearchResults([]); return; }
     try {
@@ -109,7 +126,20 @@ export default function HomePage() {
           )}
         </div>
 
-        <h2 style={{ color: "#aaa", fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>
+        {projects.length === 0 && (
+          <div style={{ textAlign: "center", padding: "60px 0" }}>
+            <h2 style={{ color: "#ddd", fontSize: 22, marginBottom: 8 }}>Welcome to Nexa</h2>
+            <p style={{ color: "#888", fontSize: 16, marginBottom: 24 }}>
+              Upload a CSV or Excel file and ask questions in plain English.
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <Button type="primary" size="large" onClick={() => setModalOpen(true)}>Upload Your Data</Button>
+              <Button size="large" onClick={createSampleProject} loading={loading}>Try Sample Data</Button>
+            </div>
+          </div>
+        )}
+
+        {projects.length > 0 && <h2 style={{ color: "#aaa", fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
           {projects.map((p) => (

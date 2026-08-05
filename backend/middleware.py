@@ -12,10 +12,12 @@ class RateLimiter:
         self._chat_requests: dict[str, list[float]] = defaultdict(list)
         self._upload_requests: dict[str, list[float]] = defaultdict(list)
         self._general_requests: dict[str, list[float]] = defaultdict(list)
+        self._login_requests: dict[str, list[float]] = defaultdict(list)
 
         # Limits
         self.chat_per_minute = 20    # chat/analysis calls
         self.upload_per_minute = 5   # file uploads
+        self.login_per_minute = 5    # login attempts
         self.general_per_minute = 60 # everything else
 
     def _check(self, bucket: dict[str, list[float]], key: str, limit: int, window: float = 60) -> bool:
@@ -36,6 +38,9 @@ class RateLimiter:
     def check_general(self, user_id: str) -> bool:
         return self._check(self._general_requests, user_id, self.general_per_minute)
 
+    def check_login(self, user_id: str) -> bool:
+        return self._check(self._login_requests, user_id, self.login_per_minute)
+
 
 # Singleton
 _rate_limiter = RateLimiter()
@@ -53,6 +58,11 @@ async def rate_limit_middleware(request: Request, call_next):
     if "/api/chat" in path and method == "POST":
         if not _rate_limiter.check_chat(user_id):
             raise HTTPException(status_code=429, detail="Too many analysis requests. Please wait a moment.", headers={"Retry-After": "30"})
+
+    # Login endpoint (brute force protection)
+    if "/api/auth/login" in path and method == "POST":
+        if not _rate_limiter.check_login(user_id):
+            raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a moment.", headers={"Retry-After": "60"})
 
     # Upload endpoints
     elif "/api/datasets/upload" in path and method == "POST":
