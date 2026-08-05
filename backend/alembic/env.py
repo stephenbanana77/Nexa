@@ -1,14 +1,21 @@
 """Alembic environment configuration."""
+import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from database import Base
-from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart
+from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell
+from models.skill import Skill, SkillExecution
+from models.resource import Resource, ResourceReference
+from models.run import Run, RunStep
+from models.workflow import Workflow, WorkflowStep
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+
+# Override sqlalchemy.url with environment variable
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://nexa:nexa@localhost:5432/nexa")
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 target_metadata = Base.metadata
 

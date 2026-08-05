@@ -117,6 +117,23 @@ Nexa/
 
 ## Data Volume Limits (V0)
 
+## V2 Features
+
+- **Skill System**: 7 built-in skills with JSON manifest + runtime registry
+- **Workflow Engine**: save analysis as reusable pipeline, edit steps, rerun
+- **Resource Layer**: URI-based registry (dataset:// chart:// insight://)
+- **Run History**: full pipeline trace with 6-step tracking
+- **Dashboard**: auto-generated from saved insights
+- **Global Search**: search across projects, datasets, insights, workflows
+- **SQL Safety**: auto-LIMIT, DROP/DELETE interception, confidence scoring
+- **Export**: CSV download + Markdown copy from chat
+
+## Quick Links
+
+- [Development Guide](./DEVELOPMENT.md)
+- [API Docs](http://localhost:8000/docs) (after starting backend)
+
+
 | Metric | Limit |
 |--------|-------|
 | File upload (CSV/Excel) | Up to 100 MB |
@@ -145,10 +162,10 @@ STORAGE_PATH=./storage
 
 | Version | Focus |
 |---------|-------|
-| **V0** | Core data analysis + AI chat + visualization |
-| **V1** | Agent memory, RAG, advanced data understanding |
-| **V2** | Skill system, MCP runtime, workflow engine |
-| **V3** | Multi-agent collaboration, marketplace, enterprise |
+| **V0** | Core data analysis + AI chat + visualization | ✅ |
+| **V1** | Agent memory, RAG, advanced data understanding | ✅ |
+| **V2** | Skill system, MCP runtime, workflow engine | ✅ |
+| **V3** | Multi-agent collaboration, marketplace, enterprise | 🔜 |
 
 ---
 
