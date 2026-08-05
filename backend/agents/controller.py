@@ -14,11 +14,12 @@ class AgentController:
     API-compatible with V0's hardcoded pipeline for drop-in replacement.
     """
 
-    def __init__(self, project_id: str, user_question: str, history: list[dict] = None, user_id: str = None):
+    def __init__(self, project_id: str, user_question: str, history: list[dict] = None, user_id: str = None, dataset_id: str = None):
         self.project_id = project_id
         self.question = user_question
         self.history = history or []
         self._user_id = user_id
+        self._dataset_id = dataset_id
 
     async def run(self) -> AsyncGenerator[dict, None]:
         """Run the LangGraph agent pipeline with auto-retry on failure."""
@@ -39,7 +40,7 @@ class AgentController:
             token_estimate = 0
 
             try:
-                async for event in run_agent(self.project_id, self.question, self.history):
+                async for event in run_agent(self.project_id, self.question, self.history, self._dataset_id):
                     node_name = event.get("event", "")
                     if node_name in node_map and node_name not in step_ids:
                         step_ids[node_name] = tracker.add_step(

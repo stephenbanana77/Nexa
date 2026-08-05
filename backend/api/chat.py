@@ -22,7 +22,8 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     project_id: str
     message: str
-    conversation_id: str | None = None  # None = create new conversation
+    conversation_id: str | None = None
+    dataset_id: str | None = None
 
 
 def get_conversation_history(conv_id: str) -> list[dict]:
@@ -73,12 +74,12 @@ async def chat_stream(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.project_id == req.project_id)
-        .order_by(Dataset.created_at.desc())
-        .first()
-    )
+    # If dataset_id is specified, use that; otherwise use most recent
+    dataset_query = db.query(Dataset).filter(Dataset.project_id == req.project_id)
+    if req.dataset_id:
+        dataset = dataset_query.filter(Dataset.id == req.dataset_id).first()
+    else:
+        dataset = dataset_query.order_by(Dataset.created_at.desc()).first()
     if not dataset:
         raise HTTPException(status_code=400, detail="No dataset uploaded")
 
@@ -105,7 +106,7 @@ async def chat_stream(
     history = get_conversation_history(conv_id)
 
     # Run agent with history
-    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id)
+    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id, dataset_id=req.dataset_id)
 
     async def event_stream():
         full_response = ""

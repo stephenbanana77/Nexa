@@ -48,8 +48,9 @@ _rate_limiter = RateLimiter()
 
 async def rate_limit_middleware(request: Request, call_next):
     """FastAPI middleware to enforce rate limits."""
-    # Determine user from auth header (simple approach)
-    user_id = request.headers.get("x-user-id", request.client.host if request.client else "unknown")
+    # Use client IP only (NOT x-user-id header — trivially forgeable)
+    forwarded = request.headers.get("X-Forwarded-For")
+    user_id = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
 
     path = request.url.path
     method = request.method

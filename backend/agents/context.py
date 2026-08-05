@@ -4,15 +4,14 @@ from models.project import Dataset
 from tools import get_engine
 
 
-def get_schema_context(project_id: str) -> str:
+def get_schema_context(project_id: str, dataset_id: str = None) -> str:
     db = SessionLocal()
     try:
-        dataset = (
-            db.query(Dataset)
-            .filter(Dataset.project_id == project_id)
-            .order_by(Dataset.created_at.desc())
-            .first()
-        )
+        query = db.query(Dataset).filter(Dataset.project_id == project_id)
+        if dataset_id:
+            dataset = query.filter(Dataset.id == dataset_id).first()
+        else:
+            dataset = query.order_by(Dataset.created_at.desc()).first()
         if not dataset or not dataset.schema_info:
             return "No dataset loaded."
 
