@@ -2,6 +2,10 @@ import re
 from agents.state import AgentState
 from agents.llm import chat
 from agents.prompts import SQL_GENERATION_PROMPT
+import logging
+
+logger = logging.getLogger(__name__)
+
 from agents.tools import execute_query
 
 
@@ -55,6 +59,7 @@ def execute_sql(state: AgentState) -> dict:
             "next_action": "analyze",
         }
     except Exception as e:
+        logger.warning(f"SQL execution failed (attempt {state.get('retry_count', 0)+1}): {e}")
         retry = state.get("retry_count", 0)
         if retry < 2:
             return {

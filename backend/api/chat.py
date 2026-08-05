@@ -106,14 +106,22 @@ async def chat_stream(
     async def event_stream():
         full_response = ""
         last_event = {}
-        async for event in controller.run():
-            last_event = event
-            if event["event"] == "insight":
-                full_response = event.get("summary", "")
+        try:
+            async for event in controller.run():
+                last_event = event
+                if event["event"] == "insight":
+                    full_response = event.get("summary", "")
+                yield {
+                    "event": event["event"],
+                    "data": json.dumps(event, default=str),
+                }
+        except Exception as e:
+            logger.exception("Chat analysis failed")
             yield {
-                "event": event["event"],
-                "data": json.dumps(event, default=str),
+                "event": "error",
+                "data": json.dumps({"message": f"Analysis failed: {str(e)}", "event": "error"}),
             }
+            return
 
         # Save assistant response
         save_message(conv_id, "assistant", full_response, {

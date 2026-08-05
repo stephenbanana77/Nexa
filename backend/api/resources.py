@@ -1,6 +1,8 @@
 """Resource API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from models.user import User
+from services.auth import get_current_user
 from resources.registry import (
     list_resources,
     get_resource,
@@ -19,7 +21,7 @@ class ResolveRequest(BaseModel):
 
 
 @router.get("/{project_id}")
-def list_project_resources(
+def list_project_resources(current_user: User = Depends(get_current_user), 
     project_id: str,
     type: str | None = Query(None, alias="type"),
 ):
@@ -27,7 +29,7 @@ def list_project_resources(
 
 
 @router.get("/detail/{uri:path}")
-def get_resource_detail(uri: str):
+def get_resource_detail(current_user: User = Depends(get_current_user), uri: str):
     resource = get_resource(uri)
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")

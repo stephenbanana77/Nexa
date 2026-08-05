@@ -57,9 +57,10 @@ export default function ProjectPage() {
     api.get(`/api/projects/${projectId}`).then(({ data }) => setProject(data)).catch(() => navigate("/"));
     // Load existing datasets
     api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
-      if (Array.isArray(data)) {
-        setDatasets(data);
-        if (data.length > 0) setSelectedDatasetId(data[0].id);
+      const list = data.items || data;
+      if (list.length > 0) {
+        setDatasets(list);
+        setSelectedDatasetId(list[0].id);
       }
     }).catch(() => {});
   }, [projectId]);

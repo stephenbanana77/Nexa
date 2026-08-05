@@ -1,6 +1,7 @@
 """LLM client with OpenAI Compatible API."""
 import os
 from openai import OpenAI
+from utils.config import settings
 
 
 def get_llm_client() -> OpenAI:
@@ -21,6 +22,8 @@ def chat(messages: list[dict], model: str = None) -> str:
     response = client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=0.1,
+        temperature=settings.LLM_TEMPERATURE,
+        max_tokens=settings.LLM_MAX_TOKENS,
+        timeout=settings.LLM_TIMEOUT,
     )
     return response.choices[0].message.content or ""

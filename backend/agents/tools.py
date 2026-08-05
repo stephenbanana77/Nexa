@@ -39,8 +39,12 @@ tool_registry = ToolRegistry()
 
 
 # ---- SQL safety ----
+import re as _re
 
-DANGEROUS_KEYWORDS = ["DROP ", "DELETE ", "TRUNCATE ", "ALTER ", "INSERT ", "UPDATE "]
+# Use word-boundary regex to prevent bypasses like "/*DROP*/" or "DR OP"
+_DANGEROUS_PATTERN = _re.compile(
+    r"\b(DROP|DELETE|TRUNCATE|ALTER|INSERT|UPDATE)\b", _re.IGNORECASE
+)
 MAX_ROWS = 10000
 QUERY_TIMEOUT_SEC = 30
 
@@ -48,12 +52,11 @@ QUERY_TIMEOUT_SEC = 30
 def _validate_sql(sql: str) -> tuple[bool, str]:
     """Check SQL for dangerous operations and add safety limits.
     Returns (is_safe, sanitized_sql_or_error_message)."""
-    upper = sql.upper().strip()
-    for kw in DANGEROUS_KEYWORDS:
-        if kw in upper:
-            return False, f"Dangerous SQL operation '{kw.strip()}' is not allowed. Use SELECT only."
+    match = _DANGEROUS_PATTERN.search(sql)
+    if match:
+        return False, f"Dangerous SQL operation '{match.group(1)}' is not allowed. Use SELECT only."
     # Auto-add LIMIT if missing
-    if "LIMIT " not in upper:
+    if not _re.search(r"\bLIMIT\s+\d+", sql, _re.IGNORECASE):
         sql = sql.rstrip(";").rstrip() + f" LIMIT {MAX_ROWS}"
     return True, sql
 

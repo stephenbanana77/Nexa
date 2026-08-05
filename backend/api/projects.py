@@ -2,7 +2,7 @@
 import os
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -85,6 +85,9 @@ async def preview_dataset(
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
     import tempfile, contextlib
+    # Check file size before reading into memory
+    if file.size and file.size > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"File exceeds {settings.MAX_UPLOAD_SIZE_MB}MB limit")
     contents = await file.read()
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     try:
@@ -341,7 +344,7 @@ class MySQLConnectRequest(BaseModel):
     host: str
     port: int = 3306
     user: str
-    password: str
+    password: SecretStr
     database: str
 
 

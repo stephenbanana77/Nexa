@@ -1,5 +1,5 @@
 """Notebook API."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
@@ -131,7 +131,7 @@ def add_cell(
 
 
 @router.delete("/cells/{cell_id}")
-def delete_cell(cell_id: str, db: Session = Depends(get_db)):
+def delete_cell(cell_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     cell = db.query(Cell).filter(Cell.id == cell_id).first()
     if not cell:
         raise HTTPException(status_code=404, detail="Cell not found")

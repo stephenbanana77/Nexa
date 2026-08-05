@@ -1,7 +1,7 @@
 """Workflow API — CRUD, run, and Chat→Workflow conversion."""
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -76,7 +76,11 @@ def create_workflow(
 
 
 @router.get("/detail/{workflow_id}")
-def get_workflow(workflow_id: str, db: Session = Depends(get_db)):
+def get_workflow(
+    workflow_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -137,7 +141,11 @@ def update_workflow(
 
 
 @router.delete("/{workflow_id}")
-def delete_workflow(workflow_id: str, db: Session = Depends(get_db)):
+def delete_workflow(
+    workflow_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -147,7 +155,11 @@ def delete_workflow(workflow_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{workflow_id}/run")
-async def run_workflow(workflow_id: str, db: Session = Depends(get_db)):
+async def run_workflow(
+    workflow_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")

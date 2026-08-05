@@ -32,7 +32,7 @@ export default function HomePage() {
   const fetchProjects = async () => {
     try {
       const { data } = await api.get("/api/projects");
-      setProjects(data);
+      setProjects(data.items || data);
     } catch {
       message.error("Failed to load projects");
     }

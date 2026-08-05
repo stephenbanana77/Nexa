@@ -35,7 +35,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     api.get(`/api/insights/project/${projectId}`)
-      .then(({ data }) => setInsights(data))
+      .then(({ data }) => setInsights(data.items || data))
       .catch(() => message.error("Failed to load insights"));
   }, [projectId]);
 

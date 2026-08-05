@@ -1,6 +1,6 @@
 """Connections API — manage external data sources."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -22,7 +22,7 @@ class ConnectionCreate(BaseModel):
     host: str = ""
     port: int = 5432
     user: str = ""
-    password: str = ""
+    password: SecretStr = ""
     database: str = ""
     sheet_url: str = ""
 
