@@ -1,7 +1,7 @@
 """Nexa V0 - AI-powered data analysis workspace."""
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
@@ -13,10 +13,14 @@ from middleware import rate_limit_middleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    # Register built-in skills
     from skills.builtin import register_builtin_skills
     register_builtin_skills()
     yield
+    # Graceful shutdown: close DB connections and engine registry
+    from tools.query_engine import engine_registry
+    engine_registry.clear()
+    from database.session import engine as db_engine
+    db_engine.dispose()
 
 
 from utils.config import settings
@@ -48,7 +52,20 @@ app.include_router(search_router)
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.2.0"}
+
+
+@app.get("/api/health/ready")
+async def readiness_check():
+    """Readiness probe: verifies database connectivity."""
+    from database.session import SessionLocal
+    try:
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        return {"status": "ready", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database not ready: {str(e)}")
 
 
 if __name__ == "__main__":

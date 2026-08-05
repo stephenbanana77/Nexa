@@ -160,27 +160,33 @@ class EngineRegistry:
     """Registry for managing multiple data source engines per project."""
 
     def __init__(self):
+        import threading
         self._engines: dict[str, DataSourceEngine] = {}
+        self._lock = threading.Lock()
 
     def register(self, project_id: str, engine: DataSourceEngine):
-        self._engines[project_id] = engine
+        with self._lock:
+            self._engines[project_id] = engine
 
     def get(self, project_id: str) -> DataSourceEngine:
-        if project_id not in self._engines:
-            # Default: DuckDB (lazy init)
-            self._engines[project_id] = DuckDBEngine()
-        return self._engines[project_id]
+        with self._lock:
+            if project_id not in self._engines:
+                self._engines[project_id] = DuckDBEngine()
+            return self._engines[project_id]
 
     def remove(self, project_id: str):
-        engine = self._engines.pop(project_id, None)
+        with self._lock:
+            engine = self._engines.pop(project_id, None)
         if isinstance(engine, MySQLConnector):
             engine.close()
 
     def clear(self):
-        for engine in self._engines.values():
+        with self._lock:
+            engines = dict(self._engines)
+            self._engines.clear()
+        for engine in engines.values():
             if isinstance(engine, MySQLConnector):
                 engine.close()
-        self._engines.clear()
 
 
 # Singleton registry

@@ -395,3 +395,33 @@ def connect_mysql(
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"MySQL connection failed: {str(e)}")
+
+
+@router.delete("/{project_id}")
+def delete_project(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a project and all associated data (datasets, files, DuckDB cache)."""
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == current_user.id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Clean up uploaded files
+    import glob
+    pattern = os.path.join(settings.STORAGE_PATH, f"{project_id}_*")
+    for fp in glob.glob(pattern):
+        try:
+            os.remove(fp)
+        except OSError:
+            pass
+
+    # Remove DuckDB engine from registry
+    from tools.query_engine import engine_registry
+    engine_registry.remove(project_id)
+
+    # Delete project (ORM cascades datasets, conversations, messages, etc.)
+    db.delete(project)
+    db.commit()
+    return {"ok": True, "deleted": project_id}

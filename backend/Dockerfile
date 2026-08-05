@@ -9,5 +9,5 @@ COPY . .
 
 EXPOSE 8000
 
-# Run Alembic migrations then start server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+# Run Alembic migrations then start with gunicorn + 4 uvicorn workers
+CMD ["sh", "-c", "alembic upgrade head && gunicorn main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000 --timeout 120"]

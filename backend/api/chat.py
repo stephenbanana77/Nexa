@@ -1,5 +1,9 @@
 """Chat API with SSE streaming and conversation memory."""
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
