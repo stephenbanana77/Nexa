@@ -24,6 +24,12 @@ export default function HomePage() {
   const createSampleProject = async () => {
     setLoading(true);
     try {
+      // Check if sample project already exists
+      const existing = projects.find((p: Project) => p.name === "Sample - Superstore");
+      if (existing) {
+        navigate(`/project/${existing.id}`);
+        return;
+      }
       const proj = await api.post("/api/projects", { name: "Sample - Superstore" });
       const pid = proj.data.id;
       // Use a small built-in CSV for demo

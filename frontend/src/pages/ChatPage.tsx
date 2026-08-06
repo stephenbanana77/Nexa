@@ -370,74 +370,62 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                     </div>
                   </div>
                 )}
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<SaveOutlined />}
-                  onClick={() => saveInsight(msg)}
-                  style={{ marginTop: 8, color: "#888" }}
-                >
-                  Save Insight
-                </Button>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<BookOutlined />}
-                  onClick={() => openInNotebook(msg)}
-                  style={{ marginTop: 8, color: "#888" }}
-                >
-                  Open in Notebook
-                </Button>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<BranchesOutlined />}
-                  onClick={saveAsWorkflow}
-                  style={{ marginTop: 8, color: "#888" }}
-                >
-                  Save as Workflow
-                </Button>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<ShareAltOutlined />}
-                  onClick={() => navigate(`/project/${projectId}/dashboard`)}
-                  style={{ marginTop: 8, color: "#888" }}
-                >
-                  Dashboard
-                </Button>
-                {msg.rows && msg.rows.length > 0 && (
+                {/* Action buttons — primary CTA first */}
+                <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <Button
-                    type="text" size="small" icon={<DownloadOutlined />}
+                    type="primary"
+                    icon={<ShareAltOutlined />}
                     onClick={() => {
-                      const escapeCsv = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
-                      const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...msg.rows!.map((r: any[]) => r.map(escapeCsv).join(","))].join("\n");
-                      const blob = new Blob([csv], { type: "text/csv" });
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob); a.download = "export.csv"; a.click();
+                      saveInsight(msg);
+                      navigate(`/project/${projectId}/dashboard`);
                     }}
-                    style={{ marginTop: 8, color: "#888" }}
-                  >CSV</Button>
-                )}
-                {msg.content && (
-                  <Button
-                    type="text" size="small" icon={<CopyOutlined />}
-                    onClick={() => { navigator.clipboard.writeText(msg.content!); message.success("Copied!"); }}
-                    style={{ marginTop: 8, color: "#888" }}
-                  >Copy</Button>
-                )}
-                {msg.content && (
-                  <Button
-                    type="text" size="small" icon={<DownloadOutlined />}
-                    onClick={() => {
-                      const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.sql ? "```sql\n" + msg.sql + "\n```" : ""}`;
-                      const blob = new Blob([md], { type: "text/markdown" });
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob); a.download = "analysis.md"; a.click();
-                    }}
-                    style={{ marginTop: 8, color: "#888" }}
-                  >MD</Button>
-                )}
+                  >
+                    View in Dashboard
+                  </Button>
+                  {msg.content && (
+                    <Button
+                      icon={<DownloadOutlined />}
+                      onClick={() => {
+                        const safeSql = (msg.sql || "").replace(/```/g, "'''");
+                        const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.columns?.length ? "## Data\n\n| " + msg.columns.join(" | ") + " |\n|" + msg.columns.map(() => "---").join("|") + "|\n" + (msg.rows || []).slice(0, 20).map((r: any[]) => "| " + r.map((v: any) => String(v ?? "").replace(/\|/g, "\\|")).join(" | ") + " |").join("\n") + "\n" : ""}\n\n${safeSql ? "```sql\n" + safeSql + "\n```" : ""}`;
+                        const blob = new Blob([md], { type: "text/markdown" });
+                        const a = document.createElement("a");
+                        const url = URL.createObjectURL(blob);
+                        a.href = url; a.download = "analysis.md"; a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
+                      }}
+                    >
+                      Export Report
+                    </Button>
+                  )}
+                  {msg.content && (
+                    <Button
+                      icon={<CopyOutlined />}
+                      onClick={() => { navigator.clipboard.writeText(msg.content!); message.success("Copied!"); }}
+                    >
+                      Copy
+                    </Button>
+                  )}
+                  {msg.rows && msg.rows.length > 0 && (
+                    <Button
+                      icon={<DownloadOutlined />}
+                      onClick={() => {
+                        const escapeCsv = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+                        const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...(msg.rows || []).map((r: any[]) => r.map(escapeCsv).join(","))].join("\n");
+                        const blob = new Blob([csv], { type: "text/csv" });
+                        const a = document.createElement("a");
+                        const url = URL.createObjectURL(blob);
+                        a.href = url; a.download = "export.csv"; a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
+                      }}
+                    >
+                      CSV
+                    </Button>
+                  )}
+                  <Button type="text" size="small" icon={<SaveOutlined />} onClick={() => saveInsight(msg)} style={{ color: "#888" }}>Save</Button>
+                  <Button type="text" size="small" icon={<BranchesOutlined />} onClick={saveAsWorkflow} style={{ color: "#888" }}>Workflow</Button>
+                  <Button type="text" size="small" icon={<BookOutlined />} onClick={() => openInNotebook(msg)} style={{ color: "#888" }}>Notebook</Button>
+                </div>
               </div>
             </div>
           )
