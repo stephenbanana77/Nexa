@@ -21,15 +21,16 @@ class ResolveRequest(BaseModel):
 
 
 @router.get("/{project_id}")
-def list_project_resources(current_user: User = Depends(get_current_user), 
+def list_project_resources(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     type: str | None = Query(None, alias="type"),
 ):
     return list_resources(project_id, resource_type=type)
 
 
 @router.get("/detail/{uri:path}")
-def get_resource_detail(current_user: User = Depends(get_current_user), uri: str):
+def get_resource_detail(uri: str, current_user: User = Depends(get_current_user)):
     resource = get_resource(uri)
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")

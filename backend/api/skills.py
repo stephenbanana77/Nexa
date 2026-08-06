@@ -50,7 +50,7 @@ def list_categories():
 
 
 @router.get("/{skill_id}")
-def get_skill(current_user: User = Depends(get_current_user), skill_id: str):
+def get_skill(skill_id: str, current_user: User = Depends(get_current_user)):
     skill = skill_registry.get(skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")

@@ -29,7 +29,7 @@ def list_runs(
 
 
 @router.get("/detail/{run_id}")
-def get_run(run_id: str):
+def get_run(run_id: str, current_user: User = Depends(get_current_user)):
     detail = get_run_detail(run_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Run not found")
