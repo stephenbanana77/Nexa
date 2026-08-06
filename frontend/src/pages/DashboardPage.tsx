@@ -30,7 +30,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!projectId) return;
     api.get(`/api/insights/project/${projectId}`)
-      .then(({ data }) => setInsights(Array.isArray(data) ? data : []))
+      .then(({ data }) => setInsights(data.items || data))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);

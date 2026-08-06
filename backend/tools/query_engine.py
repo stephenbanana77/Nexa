@@ -54,32 +54,45 @@ class DataSourceEngine(ABC):
 
 
 class DuckDBEngine(DataSourceEngine):
-    """In-memory DuckDB engine for CSV/Excel analysis."""
+    """File-backed DuckDB engine for CSV/Excel analysis. Survives restarts."""
 
-    def __init__(self):
-        self.conn = duckdb.connect(":memory:")
+    def __init__(self, db_path: str = None):
+        import os as _os
+        if db_path:
+            _os.makedirs(_os.path.dirname(db_path), exist_ok=True)
+        self.db_path = db_path
+        self.conn = duckdb.connect(db_path) if db_path else duckdb.connect(":memory:")
         self._tables: set[str] = set()
         self._table_row_counts: dict[str, int] = {}
 
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
-        with open(file_path, "rb") as f:
-            raw = f.read(200000)
-        encoding = chardet.detect(raw)["encoding"] or "utf-8"
+        # Use DuckDB's native CSV reader — avoids double memory with pandas
         try:
-            df = pd.read_csv(file_path, encoding=encoding)
+            self.conn.execute(
+                f"CREATE OR REPLACE TABLE {safe_name} AS SELECT * FROM read_csv_auto('{file_path}')"
+            )
         except Exception:
-            df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
-        self.conn.register(safe_name, df)
+            # Fallback: pandas for complex encodings
+            with open(file_path, "rb") as f:
+                raw = f.read(200000)
+            encoding = chardet.detect(raw)["encoding"] or "utf-8"
+            try:
+                df = pd.read_csv(file_path, encoding=encoding)
+            except Exception:
+                df = pd.read_csv(file_path, encoding=encoding, encoding_errors="replace")
+            self.conn.register(safe_name, df)
         self._tables.add(safe_name)
-        self._table_row_counts[safe_name] = len(df)
+        self._table_row_counts[safe_name] = int(
+            self.conn.execute(f"SELECT COUNT(*) FROM {safe_name}").fetchone()[0]
+        )
 
     def register_excel(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         df = pd.read_excel(file_path)
         self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
-        self.conn.register(safe_name, df)
+        self.conn.execute(f"CREATE OR REPLACE TABLE {safe_name} AS SELECT * FROM df")
         self._tables.add(safe_name)
         self._table_row_counts[safe_name] = len(df)
 
@@ -171,7 +184,9 @@ class EngineRegistry:
     def get(self, project_id: str) -> DataSourceEngine:
         with self._lock:
             if project_id not in self._engines:
-                self._engines[project_id] = DuckDBEngine()
+                import os as _os
+                db_path = _os.path.join(_os.getenv("STORAGE_PATH", "./storage"), f"{project_id}.duckdb")
+                self._engines[project_id] = DuckDBEngine(db_path)
             return self._engines[project_id]
 
     def remove(self, project_id: str):

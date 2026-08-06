@@ -375,8 +375,8 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                   <Button
                     type="primary"
                     icon={<ShareAltOutlined />}
-                    onClick={() => {
-                      saveInsight(msg);
+                    onClick={async () => {
+                      await saveInsight(msg);
                       navigate(`/project/${projectId}/dashboard`);
                     }}
                   >
