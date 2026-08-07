@@ -251,7 +251,7 @@ def list_datasets(
     ]
 
 
-@router.get("/datasets/{dataset_id}")
+@router.get("/datasets/by-id/{dataset_id}")
 def get_dataset(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
@@ -284,7 +284,7 @@ class QueryRequest(BaseModel):
     sql: str
 
 
-@router.get("/datasets/{dataset_id}/preview")
+@router.get("/datasets/by-id/{dataset_id}/preview")
 def preview_dataset(
     dataset_id: str,
     limit: int = 1000,
@@ -311,7 +311,7 @@ def preview_dataset(
     return engine.preview(limit=limit)
 
 
-@router.post("/datasets/{dataset_id}/query")
+@router.post("/datasets/by-id/{dataset_id}/query")
 def query_dataset(
     dataset_id: str,
     req: QueryRequest,

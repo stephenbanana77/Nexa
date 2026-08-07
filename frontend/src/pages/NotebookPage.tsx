@@ -74,7 +74,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
         message.error("No dataset found");
         return;
       }
-      const { data } = await api.post(`/api/datasets/${(datasets.data as any[])[0].id}/query`, { sql });
+      const { data } = await api.post(`/api/datasets/by-id/${(datasets.data as any[])[0].id}/query`, { sql });
       setSqlResults((p) => ({ ...p, [cellId]: data }));
     } catch (err: any) {
       message.error(err.response?.data?.detail || "Query failed");

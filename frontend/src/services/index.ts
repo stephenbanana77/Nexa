@@ -41,10 +41,10 @@ export const datasetService = {
     }),
 
   getPreview: (datasetId: string, limit = 1000) =>
-    api.get<PreviewData>(`/api/datasets/${datasetId}/preview?limit=${limit}`),
+    api.get<PreviewData>(`/api/datasets/by-id/${datasetId}/preview?limit=${limit}`),
 
   query: (datasetId: string, sql: string) =>
-    api.post(`/api/datasets/${datasetId}/query`, { sql }),
+    api.post(`/api/datasets/by-id/${datasetId}/query`, { sql }),
 
   connectMySQL: (config: { project_id: string; host: string; port: number; user: string; password: string; database: string }) =>
     api.post("/api/datasets/connect-mysql", config),

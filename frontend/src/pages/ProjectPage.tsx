@@ -105,7 +105,7 @@ export default function ProjectPage() {
 
   const loadPreview = async (datasetId: string) => {
     try {
-      const { data } = await api.get(`/api/datasets/${datasetId}/preview?limit=1000`);
+      const { data } = await api.get(`/api/datasets/by-id/${datasetId}/preview?limit=1000`);
       setPreviewData(data);
     } catch {
       message.error("Failed to load preview");
