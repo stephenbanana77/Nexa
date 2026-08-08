@@ -18,8 +18,11 @@ export default function LoginPage() {
         await register(values.email, values.password);
       }
       navigate("/");
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || "Something went wrong");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : "Something went wrong";
+      message.error(msg || "Something went wrong");
     } finally {
       setLoading(false);
     }

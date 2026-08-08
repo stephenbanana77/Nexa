@@ -348,6 +348,98 @@ def query_dataset(
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
 
 
+@router.get("/datasets/relationships")
+def get_dataset_relationships(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Detect potential join keys between datasets in a project.
+
+    Finds columns with matching names/types across datasets and suggests JOIN paths.
+    """
+    project = db.query(Project).filter(
+        Project.id == project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    datasets = db.query(Dataset).filter(Dataset.project_id == project_id).all()
+    if len(datasets) < 2:
+        return {"relationships": [], "hint": "Need at least 2 datasets to detect relationships"}
+
+    from tools import get_engine, load_dataset
+
+    # Load all datasets and collect schemas
+    schemas: list[dict] = []
+    for ds in datasets:
+        load_dataset(project.id, ds.file_path, ds.source_type)
+        engine = get_engine(project.id, table_name=ds.table_name)
+        cols = engine.get_schema(ds.table_name)
+        schemas.append({
+            "dataset_id": ds.id,
+            "dataset_name": ds.name,
+            "table_name": ds.table_name,
+            "columns": {c.name: c.type for c in cols},
+            "row_count": ds.row_count,
+        })
+
+    # Find common column names with compatible types
+    relationships = []
+    for i in range(len(schemas)):
+        for j in range(i + 1, len(schemas)):
+            a, b = schemas[i], schemas[j]
+            common = []
+            for col_name, col_type in a["columns"].items():
+                if col_name in b["columns"]:
+                    common.append({
+                        "column": col_name,
+                        "type_a": col_type,
+                        "type_b": b["columns"][col_name],
+                        "compatible": _types_compatible(col_type, b["columns"][col_name]),
+                    })
+
+            if common:
+                # Score by number of compatible keys
+                compatible_keys = [c for c in common if c["compatible"]]
+                score = len(compatible_keys)
+                # Heuristic: columns ending in _id are strong candidates
+                strong_keys = [c for c in compatible_keys if c["column"].endswith("_id") or c["column"] == "id"]
+                score += len(strong_keys) * 2
+
+                relationships.append({
+                    "source": {"id": a["dataset_id"], "name": a["dataset_name"], "rows": a["row_count"]},
+                    "target": {"id": b["dataset_id"], "name": b["dataset_name"], "rows": b["row_count"]},
+                    "common_columns": common,
+                    "compatible_keys": [c["column"] for c in compatible_keys],
+                    "strong_keys": [c["column"] for c in strong_keys],
+                    "suggested_join": f"FROM {a['table_name']} JOIN {b['table_name']} ON {a['table_name']}.{compatible_keys[0]['column']} = {b['table_name']}.{compatible_keys[0]['column']}" if compatible_keys else None,
+                    "score": score,
+                })
+
+    # Sort by score descending
+    relationships.sort(key=lambda r: r["score"], reverse=True)
+
+    return {
+        "relationships": relationships,
+        "datasets": [{"id": s["dataset_id"], "name": s["dataset_name"], "table": s["table_name"], "rows": s["row_count"]} for s in schemas],
+    }
+
+
+def _types_compatible(t1: str, t2: str) -> bool:
+    """Check if two SQL types can be joined."""
+    numeric = {"INTEGER", "BIGINT", "INT", "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC", "REAL"}
+    text = {"VARCHAR", "TEXT", "STRING", "CHAR"}
+    t1u, t2u = t1.upper(), t2.upper()
+    if t1u == t2u:
+        return True
+    if t1u in numeric and t2u in numeric:
+        return True
+    if t1u in text and t2u in text:
+        return True
+    return False
+
+
 class MySQLConnectRequest(BaseModel):
     project_id: str
     host: str

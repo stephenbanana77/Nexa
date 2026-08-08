@@ -5,6 +5,13 @@ import { PlusOutlined, LogoutOutlined, SearchOutlined } from "@ant-design/icons"
 import { useAuthStore } from "../stores/auth";
 import api from "../api/client";
 
+interface SearchResult {
+  type: string;
+  title: string;
+  subtitle?: string;
+  link: string;
+}
+
 interface Project {
   id: string;
   name: string;
@@ -19,7 +26,7 @@ export default function HomePage() {
   const { logout } = useAuthStore();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   const createSampleProject = async () => {
     setLoading(true);
@@ -110,7 +117,7 @@ export default function HomePage() {
           />
           {searchResults.length > 0 && (
             <div style={{ marginTop: 12, background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: 8 }}>
-              {searchResults.map((r: any, i: number) => (
+              {searchResults.map((r, i) => (
                 <div
                   key={i}
                   onClick={() => navigate(r.link)}

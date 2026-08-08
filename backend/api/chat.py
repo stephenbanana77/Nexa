@@ -23,7 +23,8 @@ class ChatRequest(BaseModel):
     project_id: str
     message: str
     conversation_id: str | None = None
-    dataset_id: str | None = None
+    dataset_id: str | None = None   # legacy — single dataset
+    dataset_ids: list[str] | None = None  # multi-dataset support
 
 
 def get_conversation_history(conv_id: str) -> list[dict]:
@@ -74,14 +75,28 @@ async def chat_stream(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # If dataset_id is specified, use that; otherwise use most recent
+    # Dataset selection: support multi-dataset via dataset_ids, or single via dataset_id
     dataset_query = db.query(Dataset).filter(Dataset.project_id == req.project_id)
-    if req.dataset_id:
-        dataset = dataset_query.filter(Dataset.id == req.dataset_id).first()
-    else:
-        dataset = dataset_query.order_by(Dataset.created_at.desc()).first()
-    if not dataset:
-        raise HTTPException(status_code=400, detail="No dataset uploaded")
+    dataset_ids = req.dataset_ids or ([req.dataset_id] if req.dataset_id else [])
+    if not dataset_ids:
+        latest = dataset_query.order_by(Dataset.created_at.desc()).first()
+        if latest:
+            dataset_ids = [latest.id]
+        else:
+            raise HTTPException(status_code=400, detail="No dataset uploaded")
+    datasets = dataset_query.filter(Dataset.id.in_(dataset_ids)).all()
+    if not datasets:
+        raise HTTPException(status_code=400, detail="No valid datasets found")
+
+    # Build a joined schema context from all selected datasets
+    from tools import get_engine, load_dataset
+    schema_parts = []
+    for ds in datasets:
+        load_dataset(req.project_id, ds.file_path, ds.source_type)
+        engine = get_engine(req.project_id, table_name=ds.table_name)
+        cols = engine.get_schema(ds.table_name)
+        schema_parts.append(f"TABLE {ds.table_name} ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
+    multi_schema = "\n".join(schema_parts)
 
     # Conversation management: reuse or create
     conv_id = req.conversation_id
@@ -106,7 +121,7 @@ async def chat_stream(
     history = get_conversation_history(conv_id)
 
     # Run agent with history
-    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id, dataset_id=req.dataset_id)
+    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id, dataset_id=req.dataset_id, schema_override=multi_schema if dataset_ids else None)
 
     async def event_stream():
         full_response = ""

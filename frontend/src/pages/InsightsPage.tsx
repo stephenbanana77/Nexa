@@ -20,7 +20,7 @@ interface Insight {
     row_count?: number;
     charts?: ChartConfig[];
     key_findings?: string[];
-    tables?: { columns: string[]; rows: any[][] }[];
+    tables?: { columns: string[]; rows: unknown[][] }[];
   };
   created_at: string;
 }
@@ -176,9 +176,9 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {table.rows.slice(0, 15).map((row: any[], ri: number) => (
+                      {table.rows.slice(0, 15).map((row: unknown[], ri: number) => (
                         <tr key={ri}>
-                          {row.map((val: any, ci: number) => (
+                          {row.map((val: unknown, ci: number) => (
                             <td key={ci} style={{ padding: "3px 10px", borderBottom: "0.5px solid #222", color: "#ccc" }}>
                               {String(val)}
                             </td>

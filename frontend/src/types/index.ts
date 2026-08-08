@@ -42,10 +42,35 @@ export interface Dataset {
 }
 
 // ---- Chat ----
+export interface ChartAxisConfig {
+  x?: string;
+  y?: string | string[];
+  color?: string;
+  label?: string;
+}
+
+export interface ChartData {
+  labels: string[];
+  datasets: { label: string; data: number[]; backgroundColor?: string | string[] }[];
+}
+
 export interface ChartConfig {
   type: "bar" | "line" | "pie" | "scatter";
   title: string;
-  options: Record<string, unknown>;
+  options: {
+    axes?: ChartAxisConfig;
+    data?: ChartData;
+    stacked?: boolean;
+    legend?: boolean;
+    colors?: string[];
+  };
+}
+
+export interface CredibilityMeta {
+  rows_queried: number;
+  sql_retries: number;
+  mode: "sql" | "skill" | "llm";
+  data_coverage: string;
 }
 
 export interface ChatMessage {
@@ -56,6 +81,7 @@ export interface ChatMessage {
   rows?: unknown[][];
   row_count?: number;
   charts?: ChartConfig[];
+  credibility?: CredibilityMeta;
 }
 
 export interface ProgressStage {
@@ -126,8 +152,8 @@ export interface SkillExecution {
   id: string;
   skill_id: string;
   status: "pending" | "running" | "done" | "failed";
-  inputs: Record<string, unknown>;
-  output: Record<string, unknown>;
+  inputs: Record<string, string | number | boolean>;
+  output: Record<string, unknown> | null;
   started_at: string;
   finished_at: string | null;
 }

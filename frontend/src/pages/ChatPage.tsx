@@ -18,7 +18,7 @@ interface ChatMessage {
   content: string;
   sql?: string;
   columns?: string[];
-  rows?: any[][];
+  rows?: unknown[][];
   row_count?: number;
   charts?: ChartConfig[];
   credibility?: {
@@ -50,15 +50,20 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([]);
   const [datasets, setDatasets] = useState<{id: string; name: string}[]>([]);
+  const [relationships, setRelationships] = useState<any>(null);
 
   useEffect(() => {
     if (!projectId) return;
     api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
       const list = data.items || data;
       setDatasets(Array.isArray(list) ? list : []);
-      if (list.length > 0) setSelectedDatasetId(list[0].id);
+      if (list.length > 0) setSelectedDatasetIds([list[0].id]);
+    }).catch(() => {});
+    // Load relationships if 2+ datasets
+    api.get(`/api/datasets/relationships?project_id=${projectId}`).then(({ data }) => {
+      setRelationships(data);
     }).catch(() => {});
   }, [projectId]);
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
@@ -98,7 +103,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
 
     try {
       const token = localStorage.getItem("nexa_token");
-      const body: any = { project_id: projectId, message: text, dataset_id: selectedDatasetId || undefined };
+      const body: Record<string, unknown> = {
+        project_id: projectId,
+        message: text,
+        dataset_ids: selectedDatasetIds.length > 0 ? selectedDatasetIds : undefined,
+      };
       if (conversationId) body.conversation_id = conversationId;
 
       const response = await fetch("/api/chat/stream", {
@@ -115,7 +124,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let finalData: any = {};
+      let finalData: Record<string, unknown> = {};
       let credibilityMeta = { rows_queried: 0, sql_retries: 0, mode: "sql" as string, data_coverage: "unknown" as string };
 
       while (reader) {
@@ -178,11 +187,18 @@ export default function ChatPage({ projectId }: { projectId: string }) {
         }
       }
 
-      // Determine data coverage
-      credibilityMeta.rows_queried = finalData.row_count || 0;
+      const finalSummary = String(finalData.summary || "Analysis complete");
+      const finalSql = finalData.sql as string | undefined;
+      const finalCols = finalData.columns as string[] | undefined;
+      const finalRows = finalData.rows as unknown[][] | undefined;
+      const finalRowCount = finalData.row_count as number | undefined;
+      const finalCharts = (finalData.charts || []) as ChartConfig[];
+      const finalTotalRows = finalData.total_rows as number | undefined;
+
+      credibilityMeta.rows_queried = finalRowCount || 0;
       if (credibilityMeta.rows_queried > 0) {
-        credibilityMeta.data_coverage = finalData.total_rows
-          ? `sample of ${credibilityMeta.rows_queried}/${finalData.total_rows}`
+        credibilityMeta.data_coverage = finalTotalRows
+          ? `sample of ${credibilityMeta.rows_queried}/${finalTotalRows}`
           : `${credibilityMeta.rows_queried} rows`;
       }
 
@@ -190,17 +206,17 @@ export default function ChatPage({ projectId }: { projectId: string }) {
         ...prev,
         {
           role: "assistant",
-          content: finalData.summary || "Analysis complete",
-          sql: finalData.sql,
-          columns: finalData.columns,
-          rows: finalData.rows,
-          row_count: finalData.row_count,
-          charts: finalData.charts || [],
+          content: finalSummary,
+          sql: finalSql,
+          columns: finalCols,
+          rows: finalRows,
+          row_count: finalRowCount,
+          charts: finalCharts,
           credibility: { ...credibilityMeta },
         },
       ]);
-    } catch (err: any) {
-      message.error(err.message || "Chat failed");
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Chat failed");
       setShowProgress(false);
     } finally {
       setLoading(false);
@@ -256,7 +272,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const openInNotebook = async (msg: ChatMessage) => {
     try {
       const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
-      const cells: any[] = [];
+      const cells: { cell_type: string; content: string; sort_order: number }[] = [];
       cells.push({ cell_type: "markdown", content: `# Analysis: ${userMsg?.content || ""}`, sort_order: 0 });
       if (msg.sql) cells.push({ cell_type: "sql", content: msg.sql, sort_order: 1 });
       cells.push({ cell_type: "markdown", content: `## Result\n\n${msg.content}`, sort_order: cells.length });
@@ -373,9 +389,9 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {msg.rows.slice(0, 10).map((row: any[], ri: number) => (
+                          {msg.rows.slice(0, 10).map((row: unknown[], ri: number) => (
                             <tr key={ri}>
-                              {row.map((val: any, ci: number) => (
+                              {row.map((val: unknown, ci: number) => (
                                 <td
                                   key={ci}
                                   style={{
@@ -437,7 +453,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                       icon={<DownloadOutlined />}
                       onClick={() => {
                         const safeSql = (msg.sql || "").replace(/```/g, "'''");
-                        const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.columns?.length ? "## Data\n\n| " + msg.columns.join(" | ") + " |\n|" + msg.columns.map(() => "---").join("|") + "|\n" + (msg.rows || []).slice(0, 20).map((r: any[]) => "| " + r.map((v: any) => String(v ?? "").replace(/\|/g, "\\|")).join(" | ") + " |").join("\n") + "\n" : ""}\n\n${safeSql ? "```sql\n" + safeSql + "\n```" : ""}`;
+                        const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.columns?.length ? "## Data\n\n| " + msg.columns.join(" | ") + " |\n|" + msg.columns.map(() => "---").join("|") + "|\n" + (msg.rows || []).slice(0, 20).map((r: unknown[]) => "| " + r.map((v: unknown) => String(v ?? "").replace(/\|/g, "\\|")).join(" | ") + " |").join("\n") + "\n" : ""}\n\n${safeSql ? "```sql\n" + safeSql + "\n```" : ""}`;
                         const blob = new Blob([md], { type: "text/markdown" });
                         const a = document.createElement("a");
                         const url = URL.createObjectURL(blob);
@@ -460,8 +476,8 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                     <Button
                       icon={<DownloadOutlined />}
                       onClick={() => {
-                        const escapeCsv = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
-                        const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...(msg.rows || []).map((r: any[]) => r.map(escapeCsv).join(","))].join("\n");
+                        const escapeCsv = (v: unknown) => `"${String(v).replace(/"/g, '\"\"')}"`;
+                        const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...(msg.rows || []).map((r: unknown[]) => r.map(escapeCsv).join(","))].join("\n");
                         const blob = new Blob([csv], { type: "text/csv" });
                         const a = document.createElement("a");
                         const url = URL.createObjectURL(blob);
@@ -539,15 +555,36 @@ export default function ChatPage({ projectId }: { projectId: string }) {
           gap: 8,
         }}
       >
-        {datasets.length > 1 && (
-          <div style={{ marginBottom: 8 }}>
+        {datasets.length > 0 && (
+          <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
             <Select
-              value={selectedDatasetId}
-              onChange={setSelectedDatasetId}
+              mode="multiple"
+              value={selectedDatasetIds}
+              onChange={(vals) => setSelectedDatasetIds(vals)}
               style={{ minWidth: 200, background: "#1a1a1a" }}
               options={datasets.map((d) => ({ value: d.id, label: d.name }))}
               size="small"
+              placeholder="Select datasets"
+              maxTagCount={2}
             />
+            {relationships?.relationships?.length > 0 && selectedDatasetIds.length >= 2 && (
+              <div style={{ fontSize: 11, color: "#60a5fa" }}>
+                {relationships.relationships
+                  .filter((r: Record<string, unknown>) =>
+                    selectedDatasetIds.includes(r.source as string) &&
+                    selectedDatasetIds.includes(r.target as string)
+                  )
+                  .slice(0, 2)
+                  .map((r: Record<string, unknown>, i: number) => (
+                    <span key={i} style={{ marginRight: 8 }}>
+                      {String(r.source)} \u2194 {String(r.target)}: {" "}
+                      <code style={{ fontSize: 10, color: "#888" }}>
+                        {String(r.compatible_keys || "no keys")}
+                      </code>
+                    </span>
+                  ))}
+              </div>
+            )}
           </div>
         )}
         <Input

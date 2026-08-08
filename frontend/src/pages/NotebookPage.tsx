@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button, Popconfirm, message } from "antd";
-import { PlusOutlined, CaretRightOutlined, DeleteOutlined } from "@ant-design/icons";
+import { PlusOutlined, CaretRightOutlined, DeleteOutlined, BranchesOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
 
@@ -18,6 +19,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   const [pythonResults, setPythonResults] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.get(`/api/notebooks/project/${projectId}`).then(({ data }) => {
@@ -76,8 +78,11 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
       }
       const { data } = await api.post(`/api/datasets/by-id/${(datasets.data as any[])[0].id}/query`, { sql });
       setSqlResults((p) => ({ ...p, [cellId]: data }));
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || "Query failed");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : "Query failed";
+      message.error(msg || "Query failed");
     } finally {
       setLoading((p) => ({ ...p, [cellId]: false }));
     }
@@ -88,8 +93,11 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
     try {
       const { data } = await api.post(`/api/notebooks/cells/${cellId}/execute`, { code });
       setPythonResults((p) => ({ ...p, [cellId]: data }));
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || "Python execution failed");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : "Python execution failed";
+      message.error(msg || "Python execution failed");
     } finally {
       setLoading((p) => ({ ...p, [cellId]: false }));
     }
@@ -114,6 +122,26 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
         <Button size="small" onClick={() => addCell("markdown")} icon={<PlusOutlined />}>Markdown</Button>
         <Button size="small" onClick={() => addCell("sql")} icon={<PlusOutlined />}>SQL</Button>
         <Button size="small" onClick={() => addCell("python")} icon={<PlusOutlined />}>Python</Button>
+        {notebookId && (
+          <Button size="small" icon={<BranchesOutlined />} style={{ marginLeft: "auto" }}
+            onClick={async () => {
+              try {
+                const wf = await api.post("/api/workflows", {
+                  name: "Converted from Notebook",
+                  project_id: projectId,
+                });
+                const steps = cells.map((c, i) => {
+                  if (c.cell_type === "sql") return { type: "sql", sort_order: i, config: { sql_template: c.content }, description: "From notebook" };
+                  if (c.cell_type === "python") return { type: "analyze", sort_order: i, config: { prompt: c.content }, description: "Python cell" };
+                  return { type: "insight", sort_order: i, config: { prompt: c.content }, description: "Markdown analysis" };
+                });
+                await api.put(`/api/workflows/${wf.data.id}`, { steps });
+                message.success("Converted to Workflow");
+                navigate(`/project/${projectId}/workflow/${wf.data.id}`);
+              } catch { message.error("Failed to convert"); }
+            }}
+          >Save as Workflow</Button>
+        )}
       </div>
 
       {cells.map((cell) => {
@@ -224,9 +252,9 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(sqlResults[cell.id].rows || []).slice(0, 50).map((row: any[], ri: number) => (
+                    {(sqlResults[cell.id].rows || []).slice(0, 50).map((row: unknown[], ri: number) => (
                       <tr key={ri}>
-                        {row.map((val: any, ci: number) => (
+                        {row.map((val: unknown, ci: number) => (
                           <td key={ci} style={{ padding: "3px 10px", borderBottom: "0.5px solid #222", color: "#ccc" }}>
                             {String(val)}
                           </td>
