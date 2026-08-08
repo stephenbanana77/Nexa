@@ -1,46 +1,81 @@
 ---
 name: nexareviewer
-description: Nexa 项目代码审查。检查提交前的代码变更是否符合 10 条生产级标准（认证、错误处理、类型安全、分页、注入防护、配置、并发安全）。仅对 git diff 范围内的代码运行，不审计全库。触发词：review、code review、审查、检查代码。
-agent_created: true
+description: Review Nexa project code changes before commit or push. Use when the user asks for review, code review, 审查, 检查代码, 提交前检查, or wants to know whether the current git diff is safe. Review only changed files and report concrete bugs, security risks, missing tests, and production-readiness issues with file/line evidence.
 ---
 
 # Nexa Code Reviewer
 
-## 目的
+Perform a read-only review of the current change set. Do not edit files, stage changes, commit, or push while using this skill.
 
-在每次提交前对 `git diff` 范围内的代码进行快速审查，对照 Nexa 项目 10 条生产级标准逐条检查，输出通过/不通过及修复建议。
+## Scope
 
-## 使用方式
+1. Inspect `git status --short`.
+2. Determine the diff to review:
+   - Prefer staged changes: `git diff --cached`.
+   - If nothing is staged, review unstaged tracked changes: `git diff`.
+   - For a specific commit/range requested by the user, review that range instead.
+3. Review only changed `.py`, `.ts`, `.tsx`, `.js`, `.json`, `.yml`, and `.yaml` files.
+4. Skip generated or vendored paths: `dist/`, `build/`, `node_modules/`, `.venv/`, `venv/`, coverage outputs, and lockfiles unless the user asks.
+5. Treat deleted files as in scope only for behavioral impact: imports, routes, scripts, docs, or references that may now break.
 
-### 步骤 1：获取变更范围
+## Required Context
 
-```bash
-git diff HEAD~1 --name-only     # 最近一次提交的变更文件
-git diff --cached --name-only   # 暂存区的变更文件
-```
+Before judging the diff, read only the smallest useful project context:
 
-仅审查 `.py`、`.ts`、`.tsx`、`.js`、`.json`、`.yml` 文件。跳过 `dist/`、`node_modules/`、`venv/`。
+- `README.md` and `DEVELOPMENT.md` when the change affects product behavior, setup, API shape, or deployment.
+- Nearby code for each changed file, not the whole repository.
+- Existing tests or fixtures covering the touched module when available.
+- `references/checklist.md` for Nexa-specific production standards.
 
-### 步骤 2：逐条检查
+## Review Method
 
-加载 `references/checklist.md`，对每个变更文件逐条验证。每条检查结果分为：✅ 通过 / ❌ 失败 / ➖ 不适用。
+Use the checklist as a guide, not a box-ticking form. A finding must satisfy all three conditions:
 
-### 步骤 3：输出报告
+1. It is introduced or made worse by the reviewed change.
+2. It has a concrete failure mode, security risk, data risk, or maintainability cost.
+3. It can be tied to a file and line or a clearly named changed block.
+
+Avoid speculative findings. If something is uncertain, label it as a question or residual risk rather than a defect.
+
+## Severity
+
+- P0: Data loss, auth bypass, secret exposure, remote code execution, broken deploy, or app-wide outage.
+- P1: User-visible broken behavior, security weakness, broken API contract, missing migration, major performance regression.
+- P2: Edge-case bug, missing important test, brittle error handling, observability gap.
+- P3: Style, naming, small cleanup, or local consistency issue. Include only when it materially helps.
+
+## Output
+
+Lead with findings, ordered by severity. Keep the report short and evidence-driven.
 
 ```markdown
 ## Review Report
 
-| # | 检查项 | 结果 | 文件 | 说明 |
-|---|--------|------|------|------|
-| 1 | Auth | ✅ | - | 所有新端点已添加 get_current_user |
-| 2 | Error | ❌ | chat.py:42 | catch 块未记录日志 |
+### Findings
+- [P1] path/to/file.py:42 - The changed handler returns all rows without pagination. A large workspace can load the full table and time out; use `offset(skip).limit(limit)` and return `{items, total, skip, limit}`.
 
-**总结**: X 通过 / Y 失败 / Z 不适用
+### Open Questions
+- Does this endpoint intentionally allow anonymous access?
+
+### Checklist Summary
+| Area | Result | Notes |
+|---|---|---|
+| Auth | pass/fail/n/a | ... |
+| Error handling | pass/fail/n/a | ... |
+| Tests | pass/fail/n/a | ... |
+
+### Verdict
+Ready to push / Not ready
 ```
 
-## 规则
+If there are no findings, say so clearly, then mention tests not run or residual risk.
 
-- 仅检查变更文件，不审计全库
-- 如果变更仅涉及文档或配置文件，标记所有代码检查为 ➖
-- 对 ❌ 项提供具体的修复代码
-- 如果所有关键项（1-6）都通过，标记为 "Ready to push"
+## Validation
+
+Run targeted validation only when it is cheap and relevant:
+
+- `pytest path/to/test_file.py` for backend Python changes.
+- `npm test`, `npm run lint`, or `npm run typecheck` for frontend changes when scripts exist.
+- Do not run broad, slow commands unless the user asked for exhaustive validation.
+
+Report every command attempted and whether it passed, failed, or was skipped.

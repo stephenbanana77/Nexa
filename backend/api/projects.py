@@ -331,12 +331,19 @@ def query_dataset(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     from tools import get_engine, load_dataset
+    from agents.tools import _validate_sql
+
+    # Enforce the same SQL safety policy as the Chat Agent
+    is_safe, result = _validate_sql(req.sql)
+    if not is_safe:
+        raise HTTPException(status_code=400, detail=result)
+    safe_sql = result
 
     load_dataset(project.id, dataset.file_path, dataset.source_type)
     engine = get_engine(project.id)
 
     try:
-        return engine.query(req.sql)
+        return engine.query(safe_sql)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
 

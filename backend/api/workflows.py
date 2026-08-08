@@ -17,6 +17,24 @@ from services.run_tracker import RunTracker, get_run_detail
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
 
+def _get_owned_workflow(workflow_id: str, user_id: str, db: Session) -> Workflow:
+    """Fetch workflow and verify it belongs to a project owned by user.
+
+    Returns 404 (not 403) to avoid leaking existence of other users' workflows.
+    """
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    project = (
+        db.query(Project)
+        .filter(Project.id == wf.project_id, Project.user_id == user_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return wf
+
+
 class WorkflowCreate(BaseModel):
     name: str
     description: str = ""
@@ -68,6 +86,11 @@ def create_workflow(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    project = db.query(Project).filter(
+        Project.id == req.project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     wf = Workflow(name=req.name, description=req.description, project_id=req.project_id)
     db.add(wf)
     db.commit()
@@ -81,9 +104,7 @@ def get_workflow(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = _get_owned_workflow(workflow_id, current_user.id, db)
     return {
         "id": wf.id,
         "name": wf.name,
@@ -112,9 +133,7 @@ def update_workflow(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = _get_owned_workflow(workflow_id, current_user.id, db)
 
     if req.name is not None:
         wf.name = req.name
@@ -146,9 +165,7 @@ def delete_workflow(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = _get_owned_workflow(workflow_id, current_user.id, db)
     db.delete(wf)
     db.commit()
     return {"status": "deleted"}
@@ -160,9 +177,7 @@ async def run_workflow(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = _get_owned_workflow(workflow_id, current_user.id, db)
 
     steps = db.query(WorkflowStep).filter(
         WorkflowStep.workflow_id == workflow_id
@@ -173,42 +188,152 @@ async def run_workflow(
 
     from agents.llm import chat
     from agents.tools import execute_query, suggest_chart
+    import re as _re
+
+    # ── Variable interpolation ──
+    _VAR_PATTERN = _re.compile(r"\$\{(\d+)\.(\w+)\}")
+
+    def _resolve_vars(template: str, context: dict[int, dict]) -> str:
+        """Replace ${N.field} references with values from previous step outputs."""
+        def _replace(match):
+            step_idx = int(match.group(1))
+            field = match.group(2)
+            val = context.get(step_idx, {}).get(field, match.group(0))
+            # Convert nested objects to a brief representation
+            if isinstance(val, (dict, list)):
+                return json.dumps(val, ensure_ascii=False)[:500]
+            return str(val)
+        return _VAR_PATTERN.sub(_replace, template)
+
+    # ── Build step context from previous results ──
+    def _build_context_from_sql(qr) -> dict:
+        """Extract useful fields from a QueryResult into context dict."""
+        return {
+            "sql": getattr(qr, "sql", ""),
+            "row_count": getattr(qr, "row_count", 0),
+            "columns": getattr(qr, "columns", []),
+            "rows": getattr(qr, "rows", [])[:5],  # sample rows for prompts
+        }
 
     async def event_stream():
-        try:
-            for step in steps:
-                tracker.add_step(step.type)
-                yield {"event": "step_start", "data": json.dumps({"event": "step_start", "type": step.type, "step": step.sort_order + 1})}
+        completed_steps = []       # list of completed step indices
+        step_context: dict[int, dict] = {}  # {step_index: {field: value}}
+        partial_error = None
 
+        for step in steps:
+            step_idx = step.sort_order
+            sid = tracker.add_step(step.type)
+            yield {
+                "event": "step_start",
+                "data": json.dumps({"event": "step_start", "type": step.type, "step": step_idx + 1, "step_id": sid}),
+            }
+
+            try:
                 if step.type == "sql":
-                    sql = step.config.get("sql_template", "SELECT * FROM data LIMIT 10")
-                    result = execute_query(wf.project_id, sql)
-                    yield {"event": "step_done", "data": json.dumps({"event": "step_done", "type": "sql", "result": result})}
+                    raw_sql = step.config.get("sql_template", "SELECT * FROM data LIMIT 10")
+                    sql = _resolve_vars(raw_sql, step_context)
+                    qr = execute_query(wf.project_id, sql)
+                    tracker.complete_step(sid, sql=sql)
+                    step_context[step_idx] = _build_context_from_sql(qr)
+                    yield {
+                        "event": "step_done",
+                        "data": json.dumps({"event": "step_done", "type": "sql", "sql": sql, "result": qr}),
+                    }
 
                 elif step.type == "skill":
                     skill_name = step.config.get("skill_name", "")
-                    yield {"event": "step_done", "data": json.dumps({"event": "step_done", "type": "skill", "message": f"Skill: {skill_name}"})}
+                    yield {
+                        "event": "step_done",
+                        "data": json.dumps({"event": "step_done", "type": "skill", "message": f"Skill: {skill_name}"}),
+                    }
+                    step_context[step_idx] = {"skill": skill_name, "status": "completed"}
 
-                elif step.type == "analyze" or step.type == "insight":
-                    prompt = step.config.get("prompt", "Analyze the results.")
-                    resp = chat([{"role": "user", "content": prompt}])
-                    yield {"event": "step_done", "data": json.dumps({"event": "step_done", "type": step.type, "insight": resp[:500]})}
+                elif step.type in ("analyze", "insight"):
+                    raw_prompt = step.config.get("prompt", "Analyze the results.")
+                    # Enrich prompt with previous step context
+                    enriched_prompt = _resolve_vars(raw_prompt, step_context)
+                    if step_context:
+                        enriched_prompt += f"\n\nPrevious results: {json.dumps({k: v for k, v in list(step_context.items())[-3:]}, ensure_ascii=False, default=str)[:1500]}"
+                    resp = chat([{"role": "user", "content": enriched_prompt}])
+                    tracker.complete_step(sid, output_summary=resp[:200])
+                    step_context[step_idx] = {"insight": resp[:1000], "prompt": enriched_prompt[:200]}
+                    yield {
+                        "event": "step_done",
+                        "data": json.dumps({"event": "step_done", "type": step.type, "insight": resp}),
+                    }
 
                 elif step.type == "visualize":
-                    chart = suggest_chart("", {"columns": [], "rows": [], "row_count": 0})
-                    yield {"event": "step_done", "data": json.dumps({"event": "step_done", "type": "visualize", "chart": chart})}
+                    # Use previous SQL results for intelligent chart suggestion
+                    prev_result = None
+                    for k in sorted(step_context.keys(), reverse=True):
+                        if "columns" in step_context[k]:
+                            prev_result = step_context[k]
+                            break
+                    chart = suggest_chart(
+                        step.config.get("chart_type", ""),
+                        {
+                            "columns": prev_result.get("columns", []) if prev_result else [],
+                            "rows": prev_result.get("rows", []) if prev_result else [],
+                            "row_count": prev_result.get("row_count", 0) if prev_result else 0,
+                        },
+                    ) if prev_result else suggest_chart("", {"columns": [], "rows": [], "row_count": 0})
 
-            # Update last_run_at
-            wf.last_run_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            wf.status = "active"
-            db.commit()
+                    if chart:
+                        tracker.complete_step(sid, chart_config=chart)
+                    step_context[step_idx] = {"chart": chart, "chart_type": step.config.get("chart_type", "auto")}
+                    yield {
+                        "event": "step_done",
+                        "data": json.dumps({"event": "step_done", "type": "visualize", "chart": chart}),
+                    }
 
-            tracker.complete()
-            yield {"event": "workflow_done", "data": json.dumps({"event": "workflow_done", "message": "Workflow complete"})}
+                else:
+                    tracker.complete_step(sid, output_summary=f"Unknown step type: {step.type}")
+                    yield {
+                        "event": "step_done",
+                        "data": json.dumps({"event": "step_done", "type": step.type, "warning": f"Unknown step type: {step.type}"}),
+                    }
 
-        except Exception as e:
-            tracker.fail(str(e))
-            yield {"event": "error", "data": json.dumps({"event": "error", "message": str(e)})}
+                completed_steps.append(step_idx)
+
+            except Exception as step_err:
+                # Partial failure: record error, preserve completed steps
+                tracker.complete_step(sid, output_summary=f"ERROR: {str(step_err)[:200]}")
+                partial_error = str(step_err)
+                yield {
+                    "event": "step_error",
+                    "data": json.dumps({"event": "step_error", "type": step.type, "step": step_idx + 1, "message": str(step_err)}),
+                }
+                break  # Stop on first failure
+
+        # Update workflow metadata
+        wf.last_run_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        wf.status = "active"
+        db.commit()
+
+        token_estimate = len(json.dumps(step_context, default=str))
+        if partial_error:
+            tracker.fail(partial_error)
+            yield {
+                "event": "workflow_done",
+                "data": json.dumps({
+                    "event": "workflow_done",
+                    "status": "partial",
+                    "completed_steps": len(completed_steps),
+                    "total_steps": len(steps),
+                    "error": partial_error,
+                }),
+            }
+        else:
+            tracker.complete(token_estimate=token_estimate)
+            yield {
+                "event": "workflow_done",
+                "data": json.dumps({
+                    "event": "workflow_done",
+                    "status": "complete",
+                    "completed_steps": len(completed_steps),
+                    "total_steps": len(steps),
+                }),
+            }
 
     return EventSourceResponse(event_stream())
 
@@ -235,6 +360,13 @@ def create_from_run(
     run_rec = db.query(Run).filter(Run.id == run_id).first()
     if run_rec:
         wf.project_id = run_rec.project_id
+
+    # Verify the run's project belongs to the current user
+    project = db.query(Project).filter(
+        Project.id == wf.project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Run not found")
 
     db.add(wf)
     db.flush()

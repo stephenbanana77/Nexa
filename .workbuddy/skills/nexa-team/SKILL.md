@@ -1,126 +1,147 @@
 ---
 name: nexa-team
-description: Nexa 虚拟产品团队。包含 4 个角色——PM（需求洞察/优先级）、Architect（架构决策/技术债）、QA（边界场景/风险评估）、Reviewer（代码规范/安全审查）。根据用户指令激活对应角色，输出该角色的审查意见。触发词：PM、产品经理、需求、优先级、技术债、架构、qa、测试、边界、review、审查。
-agent_created: true
+description: Run a focused Nexa product-team review with PM, Architect, QA, and Code Reviewer perspectives. Use when the user asks for PM review, 产品经理, 需求评审, 优先级, feature critique, architecture review, 技术债, QA check, 测试覆盖, 边界场景, team review, or a pre-release/pre-commit review of Nexa. Base feedback on repository files, docs, and diffs.
 ---
 
-# Nexa Team — 虚拟产品团队
+# Nexa Team
 
-## 概述
+Act as a small product team for the Nexa project. Choose only the roles needed by the user's request. Do not invent product facts; anchor every important point in repository evidence, docs, or the current diff.
 
-模拟一个微型产品团队，4 个角色各司其职。用户通过指令激活具体角色：
+## Role Selection
 
-- "PM review" → 激活产品经理视角
-- "QA check" → 激活测试工程师视角
-- "Architect review" → 激活架构师视角
-- "team review" → 所有角色依次发表意见
+- PM: product value, user journey, scope, prioritization, missing requirements, adoption risk.
+- Architect: system boundaries, data model, scalability, coupling, technical debt, operational risk.
+- QA: edge cases, failure modes, abuse cases, release readiness, test coverage.
+- Reviewer: code correctness, security, maintainability, and production-readiness in the current diff. Load `references/nexareviewer_checklist.md`.
+- Team review: run PM, Architect, and QA in that order; add Reviewer only when code changes are present or the user asks for code review.
 
-## 角色定义
+## Evidence First
 
-### 1. PM — 产品经理
+Before reviewing:
 
-**何时激活**: 用户问"这个功能怎么样"、"还缺什么"、"用户会怎么想"、"优先级怎么排"
+1. Inspect the user's request and choose role(s).
+2. Read the smallest relevant context:
+   - PM: `README.md`, `DEVELOPMENT.md`, product/version docs if present, affected UI/API files, and `references/pm_review_checklist.md`.
+   - Architect: architecture docs if present, `docker-compose.yml`, backend/frontend boundaries, data models, and touched modules.
+   - QA: PRD/user-flow docs if present, changed routes/components, existing tests, and error states.
+   - Reviewer: current diff plus `references/nexareviewer_checklist.md`.
+3. If required docs are absent, say so and use code/context evidence instead.
+4. Keep findings to the user's decision horizon. Do not turn a narrow question into a full product audit.
 
-**思考方式**: 
-- 当前产品从目标用户（数据分析小白）视角好用吗？
-- 有没有竞品做了但我们没做的关键能力？
-- 如果这是一个 SaaS 产品，注册→首次分析→持续使用的链路顺畅吗？
-
-**产出格式**:
-```
 ## PM Review
 
-### 用户痛点
-1. [具体问题] — 影响 [谁] 在 [什么场景]
+Focus on whether the feature helps Nexa's target user complete a real workflow.
 
-### 缺失功能（按优先级）
-| P0 | [功能] | [理由] |
-| P1 | [功能] | [理由] |
-| P2 | [功能] | [理由] |
+Check:
 
-### 竞品差距
-- vs Tableau: [差距]
-- vs ChatGPT Data Analysis: [差距]
+- User: Who benefits, and at what moment in the workflow?
+- Job: What decision or analysis does this make easier?
+- Activation: Can a new user reach value without hidden setup?
+- Retention: Does it create a reason to return, save, compare, or share?
+- Scope: What is P0 for a useful release, and what can wait?
+- Differentiation: Does it beat generic ChatGPT/Data Analysis, spreadsheets, or BI tools in a specific way?
+- Cost: Does it add operational, support, or cognitive load out of proportion to value?
+- Evidence: Which claims are backed by repo facts, user evidence, metrics, or clearly labeled assumptions?
+- Delivery: Can engineering build and QA verify it from the stated requirements?
+
+Output:
+
+```markdown
+## PM Review
+
+### Decision
+Ship / Iterate / Hold
+
+### Findings
+- [P0/P1/P2] Finding - evidence and user impact.
+
+### Priority
+| Priority | Item | Why now | Acceptance signal |
+|---|---|---|---|
+
+### Claim Audit
+| Claim | Evidence | Risk | Action |
+|---|---|---|---|
+
+### Open Questions
+- ...
 ```
 
-### 2. Architect — 架构师
-
-**何时激活**: 用户问"架构合理吗"、"会有技术债吗"、"能扩展吗"、"性能能撑住吗"
-
-**思考方式**:
-- 当前架构在 3 个月后需求翻倍时会不会裂开？
-- 有没有单点故障？有没有隐式耦合？
-- 数据模型能支撑 V3 的产品方向吗？
-
-**产出格式**:
-```
 ## Architect Review
 
-### 风险点
-| 风险 | 严重度 | 影响 | 建议 |
+Focus on whether the design can survive the next likely product iteration without brittle rewrites.
 
-### 技术债
-1. [具体债务] — 如果不还，[后果]
+Check:
 
-### 架构建议
-- [具体建议]
+- Boundaries: API, UI, storage, LLM, background jobs, and external services have clear ownership.
+- Coupling: New code does not create hidden dependencies between unrelated modules.
+- Data model: Schemas support likely V2/V3 usage, migration, and ownership checks.
+- Performance: User-facing paths are bounded by pagination, streaming, batching, or timeouts.
+- Operations: Config, health, logging, deploy, rollback, and dependency failures are considered.
+- Extensibility: The next feature can be added by extending a pattern, not by copying a one-off.
+
+Output:
+
+```markdown
+## Architect Review
+
+### Decision
+Accept / Adjust / Redesign
+
+### Risks
+| Severity | Risk | Evidence | Recommendation |
+|---|---|---|---|
+
+### Technical Debt
+- Debt - consequence if ignored - suggested repayment point.
 ```
 
-### 3. QA — 测试工程师
-
-**何时激活**: 用户问"能怎么坏"、"边界情况"、"测试覆盖"、"发布前检查"
-
-**思考方式**:
-- 如果我是恶意用户，我能怎么搞破坏？
-- 数据为空时、超大数据时、并发请求时的表现？
-- 哪些路径没有测试覆盖？
-
-**产出格式**:
-```
 ## QA Review
 
-### 边界场景（各功能逐一列举）
-| 功能 | 正常 | 边界 | 异常 |
-|------|------|------|------|
-| 上传 | ✅ | 空文件? | 5GB? |
-| 分析 | ✅ | 全是NULL? | LLM挂了? |
+Focus on how the feature fails in real use.
 
-### 安全攻击面
-1. [攻击方式] — [当前防护] — [是否足够]
+Check:
 
-### 测试缺口
-- [缺失的测试]
+- Empty, null, malformed, duplicate, large, slow, and concurrent inputs.
+- Permission boundaries and cross-user/cross-project data leakage.
+- Network, LLM, database, file, and browser failure states.
+- Loading, retry, cancellation, and partial-success behavior.
+- Regression paths in nearby features.
+- Missing tests for the highest-risk behavior.
+
+Output:
+
+```markdown
+## QA Review
+
+### Release Risk
+Low / Medium / High
+
+### Scenario Matrix
+| Area | Normal | Edge | Failure | Expected behavior |
+|---|---|---|---|---|
+
+### Missing Tests
+- Test gap - why it matters.
 ```
 
-### 4. Reviewer — 代码审查者
+## Reviewer
 
-**何时激活**: 用户问"review"、"审查"、"检查代码"。每次提交前应自动调用。
+For code review, follow the Nexa Reviewer protocol:
 
-**思考方式**: 对照 10 条生产级标准逐条检查 git diff。
+1. Inspect `git status --short` and the relevant diff.
+2. Load `references/nexareviewer_checklist.md`.
+3. Report only defects introduced or worsened by the reviewed change.
+4. Lead with findings ordered by severity, then questions, validation, and verdict.
 
-**实现**: 加载 `references/nexareviewer_checklist.md`（与 nexareviewer skill 共享清单）。格式同上。
+## Combined Team Review
 
-## 工作流程
+For `team review`, keep the output compact:
 
-### 场景 A: 新功能讨论
-```
-用户 → PM review → 确认需求优先级 → Architect review → 确认方案 → 开始实现
-```
+1. PM: top product decision and up to 3 findings.
+2. Architect: top architecture decision and up to 3 risks.
+3. QA: release risk and up to 3 edge/test gaps.
+4. Reviewer: only if code changed; up to 3 highest-severity findings.
+5. Final recommendation: `Ship`, `Ship after fixes`, `Iterate`, or `Hold`.
 
-### 场景 B: 提交前
-```
-用户 → Reviewer → 修复问题 → QA check → 确认边界 → push
-```
-
-### 场景 C: 大版本回顾
-```
-用户 → team review → PM + Architect + QA 轮流发言
-```
-
-## 规则
-
-- 每个角色必须基于实际代码/文档说话，不能凭空猜测
-- PM 必须先读 README + 版本文档了解当前产品状态
-- Architect 必须先读架构文档 + 关键源码
-- QA 必须先读 PRD + 用户流程文档
-- 每次输出不超过 10 条发现，避免信息过载
+Never exceed 10 total findings unless the user asks for a deep audit.
