@@ -21,6 +21,12 @@ interface ChatMessage {
   rows?: any[][];
   row_count?: number;
   charts?: ChartConfig[];
+  credibility?: {
+    rows_queried: number;
+    sql_retries: number;
+    mode: string;
+    data_coverage: string;
+  };
 }
 
 interface ProgressStage {
@@ -110,6 +116,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
       const decoder = new TextDecoder();
       let buffer = "";
       let finalData: any = {};
+      let credibilityMeta = { rows_queried: 0, sql_retries: 0, mode: "sql" as string, data_coverage: "unknown" as string };
 
       while (reader) {
         const { done, value } = await reader.read();
@@ -135,7 +142,9 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 updateStage("selecting_skill", "running");
               } else if (eventName === "running_skill") {
                 updateStage("selecting_skill", "done");
+                credibilityMeta.mode = "skill";
               } else if (eventName === "sql_generating") {
+                credibilityMeta.mode = "sql";
                 updateStage("planning", "done");
                 updateStage("sql_generating", "running");
               } else if (eventName === "querying") {
@@ -156,6 +165,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 setShowProgress(false);
               } else if (eventName === "retry") {
                 // Reset stages for retry attempt
+                credibilityMeta.sql_retries += 1;
                 resetStages();
                 setShowProgress(true);
                 setLoading(true);
@@ -168,6 +178,14 @@ export default function ChatPage({ projectId }: { projectId: string }) {
         }
       }
 
+      // Determine data coverage
+      credibilityMeta.rows_queried = finalData.row_count || 0;
+      if (credibilityMeta.rows_queried > 0) {
+        credibilityMeta.data_coverage = finalData.total_rows
+          ? `sample of ${credibilityMeta.rows_queried}/${finalData.total_rows}`
+          : `${credibilityMeta.rows_queried} rows`;
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -178,6 +196,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
           rows: finalData.rows,
           row_count: finalData.row_count,
           charts: finalData.charts || [],
+          credibility: { ...credibilityMeta },
         },
       ]);
     } catch (err: any) {
@@ -219,8 +238,13 @@ export default function ChatPage({ projectId }: { projectId: string }) {
     try {
       const { data } = await api.get(`/api/runs/${projectId}?limit=1`);
       if (data.length > 0) {
-        await api.post(`/api/workflows/from-run/${data[0].id}`);
-        message.success("Saved as Workflow — check Workflows tab");
+        const wf = await api.post(`/api/workflows/from-run/${data[0].id}`);
+        const wfId = wf.data.id;
+        if (wfId) {
+          navigate(`/project/${projectId}/workflow/${wfId}`);
+        } else {
+          message.success("Saved as Workflow — check Workflows tab");
+        }
       } else {
         message.warning("No analysis run found to convert");
       }
@@ -370,6 +394,32 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                     </div>
                   </div>
                 )}
+                {/* Credibility badge */}
+                {msg.credibility && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                      background: "#1b2635", color: "#60a5fa", border: "0.5px solid #1e3a5f",
+                    }}>
+                      {msg.credibility.mode.toUpperCase()}
+                    </span>
+                    <span style={{
+                      fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                      background: "#1b2635", color: "#a3b8cc", border: "0.5px solid #2d3a4a",
+                    }}>
+                      {msg.credibility.data_coverage}
+                    </span>
+                    {msg.credibility.sql_retries > 0 && (
+                      <span style={{
+                        fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                        background: "#2d1b1b", color: "#f87171", border: "0.5px solid #5f1e1e",
+                      }}>
+                        {msg.credibility.sql_retries} retr{msg.credibility.sql_retries > 1 ? "ies" : "y"}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Action buttons — primary CTA first */}
                 <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <Button

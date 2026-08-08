@@ -1,6 +1,7 @@
 """Skill API routes — browse, install, and execute skills."""
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -21,6 +22,57 @@ class SkillInstallRequest(BaseModel):
     icon: str = "ExperimentOutlined"
     definition: dict
     version: str = "1.0.0"
+
+# ── Manifest schema (subset for validation) ──
+REQUIRED_MANIFEST_KEYS = {"name", "type", "actions"}
+ALLOWED_ACTION_TYPES = {"sql", "llm", "chart", "http", "python", "notebook", "skill"}
+DANGEROUS_ACTION_TYPES = {"http", "python"}  # require explicit user confirmation
+
+
+def _validate_manifest(definition: dict) -> tuple[bool, str, dict]:
+    """Validate Skill manifest structure.
+
+    Returns (is_valid, error_message, permissions_summary).
+    """
+    if not isinstance(definition, dict):
+        return False, "definition must be a JSON object", {}
+
+    missing = REQUIRED_MANIFEST_KEYS - set(definition.keys())
+    if missing:
+        return False, f"Missing required manifest fields: {', '.join(sorted(missing))}", {}
+
+    actions = definition.get("actions", [])
+    if not isinstance(actions, list) or len(actions) == 0:
+        return False, "manifest must have at least one action", {}
+
+    permissions_summary = {
+        "skill_name": definition.get("name", "unknown"),
+        "skill_type": definition.get("type", "unknown"),
+        "total_actions": len(actions),
+        "action_types": [],
+        "dangerous_actions": [],
+        "required_inputs": [],
+    }
+
+    seen_types = set()
+    for i, action in enumerate(actions):
+        if not isinstance(action, dict):
+            return False, f"Action #{i+1} must be an object", {}
+        atype = action.get("type", "")
+        if atype not in ALLOWED_ACTION_TYPES:
+            return False, f"Action #{i+1} has unknown type '{atype}'. Allowed: {', '.join(sorted(ALLOWED_ACTION_TYPES))}", {}
+        seen_types.add(atype)
+        if atype in DANGEROUS_ACTION_TYPES:
+            permissions_summary["dangerous_actions"].append({
+                "index": i + 1,
+                "type": atype,
+                "description": action.get("description", "") or f"Runs {atype} code",
+            })
+
+    permissions_summary["action_types"] = sorted(seen_types)
+    permissions_summary["has_dangerous"] = len(permissions_summary["dangerous_actions"]) > 0
+
+    return True, "", permissions_summary
 
 
 class SkillExecuteRequest(BaseModel):
@@ -63,6 +115,22 @@ def install_skill(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # 1. Validate manifest schema
+    is_valid, err_msg, perms = _validate_manifest(req.definition)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid skill manifest: {err_msg}")
+
+    # 2. Block dangerous skills without explicit confirmation
+    if perms["has_dangerous"] and not req.definition.get("__confirm_dangerous"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "This skill contains dangerous actions that require confirmation.",
+                "dangerous_actions": perms["dangerous_actions"],
+                "hint": "Set '__confirm_dangerous': true in definition to proceed.",
+            }
+        )
+
     existing = db.query(Skill).filter(Skill.name == req.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Skill already exists")
@@ -80,7 +148,20 @@ def install_skill(
     db.add(skill)
     db.commit()
     db.refresh(skill)
-    return {"id": skill.id, "name": skill.name, "title": skill.title}
+    return {"id": skill.id, "name": skill.name, "title": skill.title, "permissions": perms}
+
+
+@router.post("/preview")
+def preview_skill(req: SkillInstallRequest):
+    """Preview a skill's permissions before installing. No DB write."""
+    is_valid, err_msg, perms = _validate_manifest(req.definition)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid skill manifest: {err_msg}")
+    return {
+        "valid": True,
+        "permissions": perms,
+        "warnings": perms["dangerous_actions"] or ["This skill uses safe operation types only"] if not perms["dangerous_actions"] else [f"{len(perms['dangerous_actions'])} dangerous action(s) detected"],
+    }
 
 
 @router.delete("/{skill_id}")
