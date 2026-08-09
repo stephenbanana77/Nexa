@@ -1,4 +1,5 @@
 """Simple in-memory rate limiter middleware."""
+import os
 import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
@@ -48,6 +49,10 @@ _rate_limiter = RateLimiter()
 
 async def rate_limit_middleware(request: Request, call_next):
     """FastAPI middleware to enforce rate limits."""
+    # Allow bypass in test/dev environments
+    if os.environ.get("ENABLE_RATE_LIMIT", "true").lower() == "false":
+        return await call_next(request)
+
     # Use client IP only (NOT x-user-id header — trivially forgeable)
     forwarded = request.headers.get("X-Forwarded-For")
     user_id = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
