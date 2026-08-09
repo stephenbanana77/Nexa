@@ -331,10 +331,10 @@ def query_dataset(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     from tools import get_engine, load_dataset
-    from agents.tools import _validate_sql
+    from services.sql_policy import validate_sql
 
     # Enforce the same SQL safety policy as the Chat Agent
-    is_safe, result = _validate_sql(req.sql)
+    is_safe, result = validate_sql(req.sql)
     if not is_safe:
         raise HTTPException(status_code=400, detail=result)
     safe_sql = result
@@ -428,9 +428,14 @@ def get_dataset_relationships(
 
 def _types_compatible(t1: str, t2: str) -> bool:
     """Check if two SQL types can be joined."""
+    import re as _re
+
+    # Strip parenthesized parameters like VARCHAR(255) → VARCHAR
+    _strip = lambda t: _re.sub(r"\(.*\)", "", t).strip().upper()
+
     numeric = {"INTEGER", "BIGINT", "INT", "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC", "REAL"}
     text = {"VARCHAR", "TEXT", "STRING", "CHAR"}
-    t1u, t2u = t1.upper(), t2.upper()
+    t1u, t2u = _strip(t1), _strip(t2)
     if t1u == t2u:
         return True
     if t1u in numeric and t2u in numeric:

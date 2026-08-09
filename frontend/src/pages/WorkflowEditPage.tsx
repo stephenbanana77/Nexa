@@ -41,6 +41,11 @@ export default function WorkflowEditPage() {
   const [name, setName] = useState("");
   const [description, setDesc] = useState("");
   const [steps, setSteps] = useState<Step[]>([]);
+  const [initialState, setInitialState] = useState<{ name: string; desc: string; stepsJson: string } | null>(null);
+
+  const isDirty = initialState
+    ? name !== initialState.name || description !== initialState.desc || JSON.stringify(steps) !== initialState.stepsJson
+    : false;
 
   useEffect(() => {
     if (!workflowId) return;
@@ -50,6 +55,7 @@ export default function WorkflowEditPage() {
         setName(data.name);
         setDesc(data.description || "");
         setSteps(data.steps || []);
+        setInitialState({ name: data.name, desc: data.description || "", stepsJson: JSON.stringify(data.steps || []) });
       })
       .catch(() => message.error("Failed to load workflow"))
       .finally(() => setLoading(false));
@@ -87,6 +93,7 @@ export default function WorkflowEditPage() {
         name, description,
         steps: steps.map((s, i) => ({ ...s, sort_order: i })),
       });
+      setInitialState({ name, desc: description, stepsJson: JSON.stringify(steps) });
       message.success("Workflow saved");
     } catch {
       message.error("Failed to save");
@@ -127,7 +134,9 @@ export default function WorkflowEditPage() {
         />
         <div style={{ display: "flex", gap: 8 }}>
           <Button icon={<PlayCircleOutlined />} onClick={handleRun}>Run</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>Save</Button>
+          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}
+            danger={isDirty}
+          >{isDirty ? "Save*" : "Save"}</Button>
         </div>
       </div>
       <Input.TextArea

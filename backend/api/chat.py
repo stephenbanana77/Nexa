@@ -77,7 +77,12 @@ async def chat_stream(
 
     # Dataset selection: support multi-dataset via dataset_ids, or single via dataset_id
     dataset_query = db.query(Dataset).filter(Dataset.project_id == req.project_id)
-    dataset_ids = req.dataset_ids or ([req.dataset_id] if req.dataset_id else [])
+    if req.dataset_ids is not None:
+        dataset_ids = req.dataset_ids
+    elif req.dataset_id:
+        dataset_ids = [req.dataset_id]
+    else:
+        dataset_ids = []
     if not dataset_ids:
         latest = dataset_query.order_by(Dataset.created_at.desc()).first()
         if latest:

@@ -39,26 +39,10 @@ tool_registry = ToolRegistry()
 
 
 # ---- SQL safety ----
-import re as _re
+# Re-exported from services/sql_policy.py (single source of truth)
+from services.sql_policy import validate_sql, MAX_ROWS, QUERY_TIMEOUT_SEC
 
-# Use word-boundary regex to prevent bypasses like "/*DROP*/" or "DR OP"
-_DANGEROUS_PATTERN = _re.compile(
-    r"\b(DROP|DELETE|TRUNCATE|ALTER|INSERT|UPDATE)\b", _re.IGNORECASE
-)
-MAX_ROWS = 10000
-QUERY_TIMEOUT_SEC = 30
-
-
-def _validate_sql(sql: str) -> tuple[bool, str]:
-    """Check SQL for dangerous operations and add safety limits.
-    Returns (is_safe, sanitized_sql_or_error_message)."""
-    match = _DANGEROUS_PATTERN.search(sql)
-    if match:
-        return False, f"Dangerous SQL operation '{match.group(1)}' is not allowed. Use SELECT only."
-    # Auto-add LIMIT if missing
-    if not _re.search(r"\bLIMIT\s+\d+", sql, _re.IGNORECASE):
-        sql = sql.rstrip(";").rstrip() + f" LIMIT {MAX_ROWS}"
-    return True, sql
+_validate_sql = validate_sql  # backward-compat alias
 
 
 # ---- Built-in tools ----

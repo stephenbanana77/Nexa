@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { Table, Tag, Spin, Empty, Typography, Card, Button } from "antd";
 import { LinkOutlined, NodeIndexOutlined, CloseOutlined } from "@ant-design/icons";
@@ -56,18 +56,24 @@ export default function ResourcesPage() {
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  const showLineage = async (uri: string) => {
+  const lineageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showLineage = useCallback((uri: string) => {
+    // Debounce: clear any pending request to prevent double-firing on rapid clicks
+    if (lineageTimerRef.current) clearTimeout(lineageTimerRef.current);
     setSelected(uri);
     setLineageLoading(true);
-    try {
-      const { data } = await api.get(`/api/resources/detail/${encodeURIComponent(uri)}`);
-      setLineage(data);
-    } catch {
-      setLineage(null);
+    lineageTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/api/resources/detail/${encodeURIComponent(uri)}`);
+        setLineage(data);
+      } catch {
+        setLineage(null);
     } finally {
       setLineageLoading(false);
     }
-  };
+    }, 150); // 150ms debounce
+  }, []);
 
   const closeLineage = () => { setSelected(null); setLineage(null); };
 
