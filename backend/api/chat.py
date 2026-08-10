@@ -103,6 +103,7 @@ async def chat_stream(
         engine = get_engine(req.project_id)
         cols = engine.get_schema("data")
         schema_parts.append(f"TABLE data ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
+    multi_schema = "\n".join(schema_parts)
     semantic_context = semantic_context_text(db, req.project_id, dataset_ids[0] if len(dataset_ids) == 1 else None)
     memory_context = analysis_memory_context(db, req.project_id)
     context_parts = [multi_schema]
@@ -111,7 +112,6 @@ async def chat_stream(
     if memory_context:
         context_parts.append(memory_context)
     enriched_schema = "\n\n".join(part for part in context_parts if part)
-    multi_schema = "\n".join(schema_parts)
 
     # Conversation management: reuse or create
     conv_id = req.conversation_id

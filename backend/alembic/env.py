@@ -5,7 +5,10 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from database import Base
-from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell
+from models import (
+    User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart,
+    Notebook, Cell, SemanticMetric, SemanticDimension, AnalysisReport,
+)
 from models.skill import Skill, SkillExecution
 from models.resource import Resource, ResourceReference
 from models.run import Run, RunStep

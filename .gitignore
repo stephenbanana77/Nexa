@@ -24,3 +24,6 @@ Thumbs.db
 
 # Env
 .env
+
+# Local server logs
+*_server.*.log

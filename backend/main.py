@@ -13,6 +13,8 @@ from middleware import rate_limit_middleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    from services.local_schema import ensure_sqlite_dev_schema
+    ensure_sqlite_dev_schema(engine)
     from skills.builtin import register_builtin_skills
     register_builtin_skills()
     yield
