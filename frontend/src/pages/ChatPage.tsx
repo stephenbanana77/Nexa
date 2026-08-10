@@ -476,7 +476,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                     <Button
                       icon={<DownloadOutlined />}
                       onClick={() => {
-                        const escapeCsv = (v: unknown) => `"${String(v).replace(/"/g, '\"\"')}"`;
+                        const escapeCsv = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`;
                         const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...(msg.rows || []).map((r: unknown[]) => r.map(escapeCsv).join(","))].join("\n");
                         const blob = new Blob([csv], { type: "text/csv" });
                         const a = document.createElement("a");

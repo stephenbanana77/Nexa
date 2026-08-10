@@ -1,5 +1,7 @@
 """Abstract base class for data source engines and engine registry."""
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -29,7 +31,7 @@ class DataSourceEngine(ABC):
     """Abstract base for all data source engines (DuckDB, MySQL, ClickHouse, etc.)."""
 
     @abstractmethod
-    def query(self, sql: str) -> QueryResult:
+    def query(self, sql: str, timeout_sec: int | None = None) -> QueryResult:
         """Execute a SQL query and return results."""
         ...
 
@@ -64,6 +66,7 @@ class DuckDBEngine(DataSourceEngine):
         self.conn = duckdb.connect(db_path) if db_path else duckdb.connect(":memory:")
         self._tables: set[str] = set()
         self._table_row_counts: dict[str, int] = {}
+        self._query_lock = threading.Lock()
 
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
@@ -96,11 +99,32 @@ class DuckDBEngine(DataSourceEngine):
         self._tables.add(safe_name)
         self._table_row_counts[safe_name] = len(df)
 
-    def query(self, sql: str) -> QueryResult:
+    def _query_sync(self, sql: str) -> QueryResult:
         result = self.conn.execute(sql).fetchall()
         columns = [desc[0] for desc in self.conn.description]
         rows = [list(row) for row in result]
         return QueryResult(columns=columns, rows=rows, row_count=len(rows))
+
+    def query(self, sql: str, timeout_sec: int | None = None) -> QueryResult:
+        if not timeout_sec:
+            with self._query_lock:
+                return self._query_sync(sql)
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(self._query_with_lock, sql)
+        try:
+            result = future.result(timeout=timeout_sec)
+            executor.shutdown(wait=True)
+            return result
+        except FutureTimeoutError as exc:
+            if hasattr(self.conn, "interrupt"):
+                self.conn.interrupt()
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise TimeoutError(f"Query timed out after {timeout_sec} seconds") from exc
+
+    def _query_with_lock(self, sql: str) -> QueryResult:
+        with self._query_lock:
+            return self._query_sync(sql)
 
     def preview(self, table_name: str = "data", limit: int = 1000) -> QueryResult:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
@@ -122,7 +146,16 @@ class MySQLConnector(DataSourceEngine):
     """MySQL query engine for connected databases."""
 
     def __init__(self, host: str, port: int, user: str, password: str, database: str):
-        self._config = {"host": host, "port": port, "user": user, "password": password, "database": database}
+        self._config = {
+            "host": host,
+            "port": port,
+            "user": user,
+            "password": password,
+            "database": database,
+            "connect_timeout": 10,
+            "read_timeout": 30,
+            "write_timeout": 30,
+        }
         self.connection = None
 
     def connect(self):
@@ -134,9 +167,14 @@ class MySQLConnector(DataSourceEngine):
                 self.connection = None
         self.connection = pymysql.connect(**self._config, cursorclass=pymysql.cursors.Cursor)
 
-    def query(self, sql: str) -> QueryResult:
+    def query(self, sql: str, timeout_sec: int | None = None) -> QueryResult:
         self.connect()
         with self.connection.cursor() as cursor:
+            if timeout_sec:
+                try:
+                    cursor.execute(f"SET SESSION MAX_EXECUTION_TIME={int(timeout_sec * 1000)}")
+                except Exception:
+                    pass
             cursor.execute(sql)
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description] if cursor.description else []

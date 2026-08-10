@@ -80,6 +80,19 @@ class RunTracker:
         finally:
             db.close()
 
+    def update_lineage(self, patch: dict):
+        """Merge a lineage patch into the current run."""
+        if not self.run_id:
+            return
+        db = SessionLocal()
+        try:
+            run = db.query(Run).filter(Run.id == self.run_id).first()
+            if run:
+                run.lineage = _deep_merge(dict(run.lineage or {}), patch)
+                db.commit()
+        finally:
+            db.close()
+
     def fail_step(self, step_id: str, error: str):
         """Mark a step as failed."""
         db = SessionLocal()
@@ -147,6 +160,7 @@ def get_run_history(project_id: str, limit: int = 20) -> list[dict]:
                 "ref_id": r.ref_id,
                 "status": r.status,
                 "plan": r.plan,
+                "lineage": _lineage_summary(r.lineage),
                 "duration_ms": r.duration_ms,
                 "token_estimate": r.token_estimate,
                 "started_at": r.started_at.isoformat() if r.started_at else None,
@@ -175,8 +189,10 @@ def get_run_detail(run_id: str) -> dict | None:
             "id": run.id,
             "type": run.type,
             "ref_id": run.ref_id,
+            "project_id": run.project_id,
             "status": run.status,
             "plan": run.plan,
+            "lineage": run.lineage or {},
             "duration_ms": run.duration_ms,
             "token_estimate": run.token_estimate,
             "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -198,3 +214,27 @@ def get_run_detail(run_id: str) -> dict | None:
         }
     finally:
         db.close()
+
+
+def _deep_merge(base: dict, patch: dict) -> dict:
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            base[key] = _deep_merge(dict(base[key]), value)
+        elif isinstance(value, list) and isinstance(base.get(key), list):
+            base[key] = [*base[key], *value]
+        else:
+            base[key] = value
+    return base
+
+
+def _lineage_summary(lineage: dict | None) -> dict | None:
+    if not lineage:
+        return None
+    result = lineage.get("result") or {}
+    return {
+        "question": lineage.get("question"),
+        "final_sql": lineage.get("final_sql"),
+        "row_count": result.get("row_count"),
+        "sql_attempt_count": len(lineage.get("sql_attempts") or []),
+        "error_count": len(lineage.get("errors") or []),
+    }

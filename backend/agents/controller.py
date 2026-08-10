@@ -1,79 +1,178 @@
-"""Agent controller — LangGraph-based analysis pipeline with run tracking + retry."""
+"""LangGraph-based analysis controller with run tracking and lineage."""
 import asyncio
+import hashlib
 from typing import AsyncGenerator
+
+from agents.context import get_schema_context
 from agents.graph import run_agent
+from agents.sanitizer import sanitize_schema, sanitize_user_input
 from services.run_tracker import RunTracker
+from services.sql_policy import inspect_sql_policy
 
 MAX_RETRIES = 2
 RETRY_BASE_DELAY = 2  # seconds: 2s then 4s
 
 
 class AgentController:
-    """Orchestrates AI-powered data analysis using LangGraph.
+    """Orchestrates AI-powered data analysis using LangGraph."""
 
-    API-compatible with V0's hardcoded pipeline for drop-in replacement.
-    """
-
-    def __init__(self, project_id: str, user_question: str, history: list[dict] = None, user_id: str = None, dataset_id: str = None, schema_override: str = None):
+    def __init__(
+        self,
+        project_id: str,
+        user_question: str,
+        history: list[dict] = None,
+        user_id: str = None,
+        dataset_id: str = None,
+        schema_override: str = None,
+    ):
         self.project_id = project_id
         self.question = user_question
         self.history = history or []
         self._user_id = user_id
         self._dataset_id = dataset_id
         self._schema_override = schema_override
+        self.run_ids: list[str] = []
 
     async def run(self) -> AsyncGenerator[dict, None]:
         """Run the LangGraph agent pipeline with auto-retry on failure."""
-        last_error = None
-
         for attempt in range(MAX_RETRIES + 1):
-            self.tracker = RunTracker(run_type="chat", project_id=self.project_id, created_by=self._user_id)
-            self.tracker.start()
+            self.tracker = RunTracker(
+                run_type="chat",
+                project_id=self.project_id,
+                created_by=self._user_id,
+            )
+            self.run_ids.append(self.tracker.start())
             tracker = self.tracker
+            tracker.update_lineage(self._initial_lineage(attempt))
+
             step_ids: dict[str, str] = {}
+            sql_attempt_count = 0
             node_map = {
-                "understanding": "understand", "planning": "plan",
-                "selecting_skill": "select_skill", "running_skill": "execute_skill",
-                "sql_generating": "sql", "querying": "execute",
-                "analyzing": "analyze", "visualizing": "visualize",
-                "insight": "compose", "done": "compose",
+                "understanding": "understand",
+                "planning": "plan",
+                "selecting_skill": "select_skill",
+                "running_skill": "execute_skill",
+                "sql_generating": "sql",
+                "querying": "execute",
+                "sql_retry": "execute",
+                "sql_failed": "execute",
+                "analyzing": "analyze",
+                "visualizing": "visualize",
+                "insight": "compose",
+                "done": "compose",
             }
             token_estimate = 0
 
             try:
-                async for event in run_agent(self.project_id, self.question, self.history, self._dataset_id, schema_override=self._schema_override):
+                async for event in run_agent(
+                    self.project_id,
+                    self.question,
+                    self.history,
+                    self._dataset_id,
+                    schema_override=self._schema_override,
+                ):
                     node_name = event.get("event", "")
-                    if node_name in node_map and node_name not in step_ids:
-                        step_ids[node_name] = tracker.add_step(
+                    step_key = node_name
+                    if node_name in ("querying", "sql_retry", "sql_failed"):
+                        step_key = f"{node_name}:{len(step_ids)}"
+
+                    if node_name in node_map and step_key not in step_ids:
+                        step_ids[step_key] = tracker.add_step(
                             node_map[node_name],
-                            input_summary=self.question[:200] if node_name == "understand" else None,
+                            input_summary=self.question[:200] if node_name == "understanding" else None,
                         )
                         token_estimate += 200
 
                     tracked_type = node_map.get(node_name)
-                    if tracked_type and node_name in step_ids:
-                        sid = step_ids[node_name]
-                        if node_name == "querying":
-                            tracker.complete_step(sid, sql=event.get("sql"))
+                    if tracked_type and step_key in step_ids:
+                        sid = step_ids[step_key]
+                        if node_name in ("querying", "sql_retry", "sql_failed"):
+                            sql_attempt_count += 1
+                            sql = event.get("sql")
+                            policy_decision = inspect_sql_policy(sql)
+                            if node_name == "sql_failed":
+                                tracker.fail_step(sid, event.get("sql_error") or event.get("message") or "SQL execution failed")
+                            else:
+                                tracker.complete_step(sid, sql=sql)
+                            tracker.update_lineage({
+                                "sql_attempts": [{
+                                    "attempt": sql_attempt_count,
+                                    "sql": sql,
+                                    "status": "failed" if node_name in ("sql_retry", "sql_failed") else "executed",
+                                    "error": event.get("sql_error"),
+                                    "retry_count": event.get("retry_count", 0),
+                                    "policy": policy_decision.to_dict(),
+                                }],
+                                "latest_sql": policy_decision.final_sql or sql,
+                                "policy_decision": policy_decision.to_dict(),
+                                "sql_retries": [{
+                                    "attempt": sql_attempt_count,
+                                    "error": event.get("sql_error"),
+                                    "next_action": "regenerate" if node_name == "sql_retry" else "compose",
+                                }] if node_name in ("sql_retry", "sql_failed") else [],
+                            })
                         elif node_name == "visualizing":
-                            tracker.complete_step(sid, chart_config=event.get("chart_config"))
+                            chart_config = event.get("chart_config")
+                            tracker.complete_step(sid, chart_config=chart_config)
+                            if chart_config:
+                                tracker.update_lineage({"chart_config": chart_config})
                         elif node_name in ("insight", "done"):
                             tracker.complete_step(sid, output_summary=(event.get("message", "") or "")[:200])
                             if node_name == "insight":
                                 token_estimate += 500
+                                tracker.update_lineage({
+                                    "final_sql": event.get("sql"),
+                                    "result": {
+                                        "columns": event.get("columns", []),
+                                        "row_count": event.get("row_count", 0),
+                                        "sample_rows": event.get("rows", [])[:10],
+                                    },
+                                    "answer": {
+                                        "summary": event.get("summary", ""),
+                                        "preview": (event.get("message", "") or "")[:200],
+                                    },
+                                })
                         else:
                             tracker.complete_step(sid)
+
                     yield event
 
                 tracker.complete(token_estimate=token_estimate)
-                return  # success — exit retry loop
+                return
 
-            except Exception as e:
-                last_error = e
-                tracker.fail(str(e))
+            except Exception as exc:
+                tracker.update_lineage({
+                    "system_retries": [{
+                        "attempt": attempt + 1,
+                        "message": str(exc),
+                        "will_retry": attempt < MAX_RETRIES,
+                    }],
+                    "errors": [{"type": "system", "attempt": attempt + 1, "message": str(exc)}],
+                })
+                tracker.fail(str(exc))
                 if attempt < MAX_RETRIES:
                     delay = RETRY_BASE_DELAY * (2 ** attempt)
-                    yield {"event": "retry", "attempt": attempt + 1, "delay": delay, "error": str(e)[:100]}
+                    yield {"event": "retry", "attempt": attempt + 1, "delay": delay, "error": str(exc)[:100]}
                     await asyncio.sleep(delay)
                 else:
                     raise
+
+    def _initial_lineage(self, attempt: int) -> dict:
+        clean_question, question_sanitized = sanitize_user_input(self.question)
+        raw_schema = self._schema_override or get_schema_context(self.project_id, self._dataset_id)
+        schema = sanitize_schema(raw_schema)
+        return {
+            "question": clean_question,
+            "question_sanitized": question_sanitized,
+            "project_id": self.project_id,
+            "dataset_id": self._dataset_id,
+            "attempt": attempt + 1,
+            "schema": {
+                "text": schema,
+                "sha256": hashlib.sha256(schema.encode("utf-8")).hexdigest(),
+                "length": len(schema),
+                "source": "override" if self._schema_override else "project",
+            },
+            "sql_attempts": [],
+            "errors": [],
+        }

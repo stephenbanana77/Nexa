@@ -12,6 +12,7 @@ frontend/dist/
 
 # Storage
 storage/
+test_storage/
 
 # IDE
 .vscode/

@@ -13,6 +13,7 @@ pydantic[email]==2.10.3
 openpyxl==3.1.5
 langgraph>=1.2
 langchain-core>=1.5
+sqlglot==27.9.0
 chardet>=5.0
 pytest>=8.0
 httpx>=0.28

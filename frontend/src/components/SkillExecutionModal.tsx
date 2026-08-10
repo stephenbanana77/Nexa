@@ -87,10 +87,12 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
             } else if (evt === "step_error") {
               setSteps((prev) => prev.map((s, i) => i === data.step - 1 ? { ...s, status: "error" as const } : s));
             }
-          } catch {}
+          } catch {
+            // Ignore malformed SSE fragments; the stream may split JSON across chunks.
+          }
         }
       }
-    } catch (err) {
+    } catch {
       message.error("Skill execution failed");
     } finally {
       setRunning(false);

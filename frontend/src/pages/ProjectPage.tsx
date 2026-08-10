@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { lazy, Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, Upload, Button, Table, Select, message, Spin, Modal } from "antd";
 import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined } from "@ant-design/icons";
@@ -6,12 +6,21 @@ import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import api from "../api/client";
-import ChatPage from "./ChatPage";
-import InsightsPage from "./InsightsPage";
-import NotebookPage from "./NotebookPage";
-import RunHistoryPage from "./RunHistoryPage";
-import WorkflowPage from "./WorkflowPage";
 import MySQLConnectModal from "../components/MySQLConnectModal";
+
+const ChatPage = lazy(() => import("./ChatPage"));
+const InsightsPage = lazy(() => import("./InsightsPage"));
+const NotebookPage = lazy(() => import("./NotebookPage"));
+const RunHistoryPage = lazy(() => import("./RunHistoryPage"));
+const WorkflowPage = lazy(() => import("./WorkflowPage"));
+
+function TabFallback() {
+  return (
+    <div style={{ minHeight: 240, display: "grid", placeItems: "center" }}>
+      <Spin />
+    </div>
+  );
+}
 
 interface SchemaField {
   name: string;
@@ -63,7 +72,7 @@ export default function ProjectPage() {
         setSelectedDatasetId(list[0].id);
       }
     }).catch(() => {});
-  }, [projectId]);
+  }, [navigate, projectId]);
 
   const handleUpload = async (file: File) => {
     setUploading(true);
@@ -153,7 +162,7 @@ export default function ProjectPage() {
       <Tabs defaultActiveKey="chat" style={{ padding: "0 24px" }} tabBarStyle={{ borderBottom: "1px solid #333" }}
         items={[
           { key: "chat", label: <span style={{ color: "#60a5fa" }}>Chat</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><ChatPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ChatPage projectId={projectId!} /></Suspense></div> },
           { key: "data", label: <span>Data</span>,
             children: <div style={{ padding: "24px 0", width: "100%" }}>
               <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -198,13 +207,13 @@ export default function ProjectPage() {
               </>}
             </div> },
           { key: "insights", label: <span>Insights</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><InsightsPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><InsightsPage projectId={projectId!} /></Suspense></div> },
           { key: "notebook", label: <span>Notebook</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><NotebookPage projectId={projectId!} /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><NotebookPage projectId={projectId!} /></Suspense></div> },
           { key: "history", label: <span>History</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><RunHistoryPage /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><RunHistoryPage /></Suspense></div> },
           { key: "workflows", label: <span>Workflows</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><WorkflowPage /></div> },
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><WorkflowPage /></Suspense></div> },
         ]}
       />
       <MySQLConnectModal
