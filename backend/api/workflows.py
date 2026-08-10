@@ -1,8 +1,8 @@
 """Workflow API — CRUD, run, and Chat→Workflow conversion."""
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -39,6 +39,7 @@ class WorkflowCreate(BaseModel):
     name: str
     description: str = ""
     project_id: str
+    steps: list[dict] | None = None
 
 
 class WorkflowUpdate(BaseModel):
@@ -83,6 +84,7 @@ def list_workflows(
 @router.post("")
 def create_workflow(
     req: WorkflowCreate,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -93,6 +95,20 @@ def create_workflow(
         raise HTTPException(status_code=404, detail="Project not found")
     wf = Workflow(name=req.name, description=req.description, project_id=req.project_id)
     db.add(wf)
+    db.flush()
+    for i, step in enumerate(req.steps or []):
+        ws = WorkflowStep(
+            workflow_id=wf.id,
+            sort_order=step.get("sort_order", i),
+            type=step.get("type", "sql"),
+            config=step.get("config", {}),
+            input_refs=step.get("input_refs", []),
+            output_ref=step.get("output_ref"),
+            description=step.get("description", ""),
+        )
+        db.add(ws)
+    if req.steps:
+        response.status_code = status.HTTP_201_CREATED
     db.commit()
     db.refresh(wf)
     return {"id": wf.id, "name": wf.name}
@@ -156,7 +172,7 @@ def update_workflow(
         wf.version = (wf.version or 0) + 1
 
     db.commit()
-    return {"status": "updated"}
+    return {"status": "updated", "id": wf.id, "name": wf.name}
 
 
 @router.delete("/{workflow_id}")
@@ -406,3 +422,66 @@ def create_from_run(
     )
 
     return {"id": wf.id, "name": wf.name, "step_count": len(detail["steps"])}
+
+
+class ChatToWorkflowRequest(BaseModel):
+    project_id: str
+    question: str
+    sql: str | None = None
+    charts: list[dict] = Field(default_factory=list)
+    insight: str | None = None
+
+
+@router.post("/chat-to-workflow", status_code=status.HTTP_201_CREATED)
+def chat_to_workflow(
+    req: ChatToWorkflowRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(
+        Project.id == req.project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    wf = Workflow(
+        name=f"Chat: {req.question[:60]}",
+        description=req.question,
+        project_id=req.project_id,
+        status="draft",
+    )
+    db.add(wf)
+    db.flush()
+
+    sort_order = 0
+    if req.sql:
+        db.add(WorkflowStep(
+            workflow_id=wf.id,
+            sort_order=sort_order,
+            type="sql",
+            config={"sql_template": req.sql},
+            description="SQL generated from chat",
+        ))
+        sort_order += 1
+    if req.insight:
+        db.add(WorkflowStep(
+            workflow_id=wf.id,
+            sort_order=sort_order,
+            type="insight",
+            config={"prompt": req.insight},
+            description="Insight generated from chat",
+        ))
+        sort_order += 1
+    for chart in req.charts:
+        db.add(WorkflowStep(
+            workflow_id=wf.id,
+            sort_order=sort_order,
+            type="visualize",
+            config=chart,
+            description=chart.get("title", "Chart"),
+        ))
+        sort_order += 1
+
+    db.commit()
+    db.refresh(wf)
+    return {"id": wf.id, "name": wf.name, "step_count": sort_order}

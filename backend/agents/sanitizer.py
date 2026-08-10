@@ -63,5 +63,6 @@ def sanitize_schema(schema_text: str) -> str:
         return ""
     # Truncate extremely large schemas
     if len(schema_text) > 8000:
-        schema_text = schema_text[:8000] + "\n... (truncated)"
+        suffix = "... (truncated)"
+        schema_text = schema_text[:8000] + suffix
     return schema_text

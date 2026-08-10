@@ -29,9 +29,18 @@ def list_runs(
 
 
 @router.get("/detail/{run_id}")
-def get_run(run_id: str, current_user: User = Depends(get_current_user)):
+def get_run(
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     detail = get_run_detail(run_id)
     if not detail:
+        raise HTTPException(status_code=404, detail="Run not found")
+    project = db.query(Project).filter(
+        Project.id == detail["project_id"], Project.user_id == current_user.id
+    ).first()
+    if not project:
         raise HTTPException(status_code=404, detail="Run not found")
     return detail
 

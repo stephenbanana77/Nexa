@@ -1,17 +1,27 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ConfigProvider, theme } from "antd";
+import { ConfigProvider, Spin, theme } from "antd";
 import { useAuthStore } from "./stores/auth";
 import ErrorBoundary from "./components/ErrorBoundary";
-import LoginPage from "./pages/LoginPage";
-import HomePage from "./pages/HomePage";
-import ProjectPage from "./pages/ProjectPage";
-import SkillsPage from "./pages/SkillsPage";
-import WorkflowEditPage from "./pages/WorkflowEditPage";
-import DashboardPage from "./pages/DashboardPage";
-import ResourcesPage from "./pages/ResourcesPage";
-import NotFoundPage from "./pages/NotFoundPage";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const ProjectPage = lazy(() => import("./pages/ProjectPage"));
+const SkillsPage = lazy(() => import("./pages/SkillsPage"));
+const WorkflowEditPage = lazy(() => import("./pages/WorkflowEditPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+
+function PageFallback() {
+  return (
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0d0d0d" }}>
+      <Spin size="large" />
+    </div>
+  );
+}
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -38,58 +48,60 @@ function App() {
     >
       <BrowserRouter>
         <ErrorBoundary>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <HomePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/project/:projectId"
-              element={
-                <ProtectedRoute>
-                  <ProjectPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/project/:projectId/skills"
-              element={
-                <ProtectedRoute>
-                  <SkillsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/project/:projectId/workflow/:workflowId"
-              element={
-                <ProtectedRoute>
-                  <WorkflowEditPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/project/:projectId/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/project/:projectId/resources"
-              element={
-                <ProtectedRoute>
-                  <ResourcesPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <HomePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:projectId"
+                element={
+                  <ProtectedRoute>
+                    <ProjectPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:projectId/skills"
+                element={
+                  <ProtectedRoute>
+                    <SkillsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:projectId/workflow/:workflowId"
+                element={
+                  <ProtectedRoute>
+                    <WorkflowEditPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:projectId/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/project/:projectId/resources"
+                element={
+                  <ProtectedRoute>
+                    <ResourcesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </BrowserRouter>
     </ConfigProvider>

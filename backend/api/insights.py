@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 
 class InsightSave(BaseModel):
-    project_id: str
+    project_id: str | None = None
     question: str
     content: dict
 
@@ -19,16 +19,21 @@ class InsightSave(BaseModel):
 @router.post("/")
 def save_insight(
     req: InsightSave,
+    project_id: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    target_project_id = req.project_id or project_id
+    if not target_project_id:
+        raise HTTPException(status_code=422, detail="project_id is required")
+
     project = db.query(Project).filter(
-        Project.id == req.project_id, Project.user_id == current_user.id
+        Project.id == target_project_id, Project.user_id == current_user.id
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    insight = Insight(project_id=req.project_id, question=req.question, content=req.content)
+    insight = Insight(project_id=target_project_id, question=req.question, content=req.content)
     db.add(insight)
     db.commit()
     db.refresh(insight)
@@ -40,7 +45,7 @@ def save_insight(
         resource_type="insight",
         resource_id=insight.id,
         name=req.question[:80] or "Insight",
-        project_id=req.project_id,
+        project_id=target_project_id,
         description=summary,
         metadata={"summary": summary, "sql": req.content.get("sql"), "row_count": req.content.get("row_count")},
         ref_id=insight.id,
@@ -68,6 +73,16 @@ def save_insight(
     db.commit()
 
     return {"id": insight.id, "created_at": insight.created_at.isoformat()}
+
+
+@router.post("")
+def save_insight_without_trailing_slash(
+    req: InsightSave,
+    project_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return save_insight(req, project_id=project_id, current_user=current_user, db=db)
 
 
 @router.get("/project/{project_id}")

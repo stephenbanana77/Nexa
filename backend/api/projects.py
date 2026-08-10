@@ -1,7 +1,7 @@
 """Project and Dataset API routes."""
 import os
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, SecretStr
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,7 @@ def list_projects(
     ]
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(
     req: ProjectCreate,
     current_user: User = Depends(get_current_user),
@@ -331,7 +331,7 @@ def query_dataset(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     from tools import get_engine, load_dataset
-    from services.sql_policy import validate_sql
+    from services.sql_policy import QUERY_TIMEOUT_SEC, validate_sql
 
     # Enforce the same SQL safety policy as the Chat Agent
     is_safe, result = validate_sql(req.sql)
@@ -343,7 +343,7 @@ def query_dataset(
     engine = get_engine(project.id)
 
     try:
-        return engine.query(safe_sql)
+        return engine.query(safe_sql, timeout_sec=QUERY_TIMEOUT_SEC)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
 

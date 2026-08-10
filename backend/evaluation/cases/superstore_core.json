@@ -1,0 +1,69 @@
+{
+  "dataset": {
+    "name": "Sample Superstore",
+    "path": "backend/evaluation/fixtures/sample_superstore.csv",
+    "table": "data"
+  },
+  "cases": [
+    {
+      "id": "sales_by_region",
+      "question": "What is total sales by region?",
+      "expected_sql": "SELECT Region, ROUND(SUM(Sales), 2) AS total_sales FROM data GROUP BY Region ORDER BY total_sales DESC"
+    },
+    {
+      "id": "profit_by_category",
+      "question": "Which product category has the highest total profit?",
+      "expected_sql": "SELECT Category, ROUND(SUM(Profit), 2) AS total_profit FROM data GROUP BY Category ORDER BY total_profit DESC LIMIT 1"
+    },
+    {
+      "id": "top_subcategories_by_sales",
+      "question": "Show the top 5 sub-categories by sales.",
+      "expected_sql": "SELECT \"Sub-Category\", ROUND(SUM(Sales), 2) AS total_sales FROM data GROUP BY \"Sub-Category\" ORDER BY total_sales DESC LIMIT 5"
+    },
+    {
+      "id": "discounted_order_count",
+      "question": "How many rows have a discount greater than zero?",
+      "expected_sql": "SELECT COUNT(*) AS discounted_rows FROM data WHERE Discount > 0"
+    },
+    {
+      "id": "average_order_profit",
+      "question": "What is the average profit per order row?",
+      "expected_sql": "SELECT ROUND(AVG(Profit), 2) AS avg_profit FROM data"
+    },
+    {
+      "id": "negative_profit_rows",
+      "question": "How many rows have negative profit?",
+      "expected_sql": "SELECT COUNT(*) AS negative_profit_rows FROM data WHERE Profit < 0"
+    },
+    {
+      "id": "sales_by_segment",
+      "question": "Compare total sales by customer segment.",
+      "expected_sql": "SELECT Segment, ROUND(SUM(Sales), 2) AS total_sales FROM data GROUP BY Segment ORDER BY total_sales DESC"
+    },
+    {
+      "id": "monthly_sales_2017",
+      "question": "What was the monthly sales trend in 2017?",
+      "expected_sql": "SELECT STRFTIME(STRPTIME(\"Order Date\", '%m/%d/%Y'), '%Y-%m') AS month, ROUND(SUM(Sales), 2) AS total_sales FROM data WHERE STRFTIME(STRPTIME(\"Order Date\", '%m/%d/%Y'), '%Y') = '2017' GROUP BY month ORDER BY month"
+    },
+    {
+      "id": "top_states_by_profit",
+      "question": "Which 10 states generated the most profit?",
+      "expected_sql": "SELECT State, ROUND(SUM(Profit), 2) AS total_profit FROM data GROUP BY State ORDER BY total_profit DESC LIMIT 10"
+    },
+    {
+      "id": "furniture_loss_subcategories",
+      "question": "Which furniture sub-categories lost money overall?",
+      "expected_sql": "SELECT \"Sub-Category\", ROUND(SUM(Profit), 2) AS total_profit FROM data WHERE Category = 'Furniture' GROUP BY \"Sub-Category\" HAVING SUM(Profit) < 0 ORDER BY total_profit ASC"
+    },
+    {
+      "id": "ship_mode_volume",
+      "question": "How many rows are there for each ship mode?",
+      "expected_sql": "SELECT \"Ship Mode\", COUNT(*) AS row_count FROM data GROUP BY \"Ship Mode\" ORDER BY row_count DESC"
+    },
+    {
+      "id": "profit_margin_by_region",
+      "question": "What is profit margin by region?",
+      "expected_sql": "SELECT Region, ROUND(SUM(Profit) / NULLIF(SUM(Sales), 0), 4) AS profit_margin FROM data GROUP BY Region ORDER BY profit_margin DESC"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button, Card, Tag, Modal, Input, Spin, Empty, message, Steps } from "antd";
 import { PlusOutlined, PlayCircleOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
@@ -31,15 +31,15 @@ export default function WorkflowPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
 
-  const loadWorkflows = () => {
+  const loadWorkflows = useCallback(() => {
     if (!projectId) return;
     api.get(`/api/workflows/${projectId}`)
       .then(({ data }) => setWorkflows(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [projectId]);
 
-  useEffect(() => { loadWorkflows(); }, [projectId]);
+  useEffect(() => { loadWorkflows(); }, [loadWorkflows]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;

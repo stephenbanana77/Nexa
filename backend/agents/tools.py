@@ -60,7 +60,7 @@ def _execute_query_tool(project_id: str, sql: str) -> QueryResult:
             engine.conn.execute(f"SET threads=4")
         except Exception:
             pass
-    return engine.query(sql)
+    return engine.query(sql, timeout_sec=QUERY_TIMEOUT_SEC)
 
 
 def _get_schema_tool(project_id: str, table_name: str = "data") -> list[dict]:

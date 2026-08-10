@@ -17,6 +17,7 @@ class Run(Base):
     project_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("projects.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")  # running | done | failed
     plan: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Agent plan steps
+    lineage: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Question/schema/SQL/result provenance
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

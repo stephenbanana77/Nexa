@@ -149,6 +149,15 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None, 
 
                 elif node_name == "execute":
                     event_data["sql"] = current_state.get("sql", "")
+                    if current_state.get("sql_error"):
+                        event_data["sql_error"] = current_state.get("sql_error", "")
+                        event_data["retry_count"] = current_state.get("retry_count", 0)
+                        if current_state.get("next_action") == "generate_sql":
+                            event_data["event"] = "sql_retry"
+                            event_data["message"] = "SQL failed; regenerating query..."
+                        elif current_state.get("next_action") == "compose":
+                            event_data["event"] = "sql_failed"
+                            event_data["message"] = current_state.get("sql_error", "")
                     event_data["progress"] = 50
 
                 elif node_name == "analyze":

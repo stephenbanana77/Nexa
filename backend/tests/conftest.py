@@ -4,13 +4,17 @@ import sys
 import pytest
 from fastapi.testclient import TestClient
 
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEST_DB_PATH = os.path.join(BACKEND_DIR, "test.db")
+TEST_STORAGE_PATH = os.path.join(BACKEND_DIR, "test_storage")
+
 # Switch to SQLite for tests
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ["SECRET_KEY"] = "test-secret"
-os.environ["STORAGE_PATH"] = "./test_storage"
+os.environ["STORAGE_PATH"] = TEST_STORAGE_PATH
 os.environ["ENABLE_RATE_LIMIT"] = "false"  # disable rate limiter in tests
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, BACKEND_DIR)
 
 from main import app
 from database import Base, engine
@@ -23,9 +27,10 @@ def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
     # Clean up test files — ignore errors (sandbox may prevent deletion)
     import shutil
-    for f in ["test.db", "test_storage"]:
+    for f in [TEST_DB_PATH, TEST_STORAGE_PATH]:
         try:
             if os.path.exists(f):
                 if os.path.isdir(f):
