@@ -1,7 +1,7 @@
 {
   "dataset": {
     "name": "Sample Superstore",
-    "path": "backend/storage/Sample - Superstore.csv",
+    "path": "backend/evaluation/fixtures/sample_superstore.csv",
     "table": "data"
   },
   "cases": [
