@@ -12,6 +12,7 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.18
 pydantic[email]==2.10.3
 openpyxl==3.1.5
+openai==1.99.1
 langgraph>=1.2
 langchain-core>=1.5
 sqlglot==27.9.0
