@@ -198,6 +198,9 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
+    from services.semantic_layer import seed_semantic_layer_from_schema
+    seed_semantic_layer_from_schema(db, project_id, dataset.id, schema_info)
+
     from tools import load_dataset, get_engine
 
     load_dataset(project_id, file_path, dataset.source_type)
@@ -368,19 +371,16 @@ def get_dataset_relationships(
     if len(datasets) < 2:
         return {"relationships": [], "hint": "Need at least 2 datasets to detect relationships"}
 
-    from tools import get_engine, load_dataset
-
-    # Load all datasets and collect schemas
+    # Collect schemas from persisted dataset metadata. Local file datasets are loaded
+    # into the default DuckDB table at query time, so relationship detection should
+    # not rely on runtime-only table names.
     schemas: list[dict] = []
     for ds in datasets:
-        load_dataset(project.id, ds.file_path, ds.source_type)
-        engine = get_engine(project.id, table_name=ds.table_name)
-        cols = engine.get_schema(ds.table_name)
         schemas.append({
             "dataset_id": ds.id,
             "dataset_name": ds.name,
-            "table_name": ds.table_name,
-            "columns": {c.name: c.type for c in cols},
+            "table_name": "data",
+            "columns": {c.get("name"): c.get("type", "") for c in (ds.schema_info or [])},
             "row_count": ds.row_count,
         })
 

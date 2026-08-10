@@ -109,6 +109,77 @@ class Insight(Base):
     charts = relationship("Chart", back_populates="insight", cascade="all, delete-orphan")
 
 
+class SemanticMetric(Base):
+    __tablename__ = "semantic_metrics"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id"), nullable=False
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("datasets.id"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    expression: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    format: Mapped[str] = mapped_column(String(50), default="number")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project = relationship("Project")
+    dataset = relationship("Dataset")
+
+
+class SemanticDimension(Base):
+    __tablename__ = "semantic_dimensions"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id"), nullable=False
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("datasets.id"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    column: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project = relationship("Project")
+    dataset = relationship("Dataset")
+
+
+class AnalysisReport(Base):
+    __tablename__ = "analysis_reports"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("projects.id"), nullable=False
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("datasets.id"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    semantic_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    memory: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project = relationship("Project")
+    dataset = relationship("Dataset")
+
+
 class Chart(Base):
     __tablename__ = "charts"
 

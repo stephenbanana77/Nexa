@@ -5,8 +5,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
-from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution, Resource, ResourceReference, Run, RunStep, Workflow, WorkflowStep
-from api import auth_router, projects_router, chat_router, insights_router, notebooks_router, skills_router, resources_router, runs_router, workflows_router, connections_router, search_router
+from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution, Resource, ResourceReference, Run, RunStep, Workflow, WorkflowStep, SemanticMetric, SemanticDimension, AnalysisReport
+from api import auth_router, projects_router, chat_router, insights_router, notebooks_router, skills_router, resources_router, runs_router, workflows_router, connections_router, search_router, semantic_router, reports_router
 from middleware import rate_limit_middleware
 
 
@@ -48,6 +48,8 @@ app.include_router(runs_router)
 app.include_router(workflows_router)
 app.include_router(connections_router)
 app.include_router(search_router)
+app.include_router(semantic_router)
+app.include_router(reports_router)
 
 
 @app.get("/api/health")

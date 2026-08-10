@@ -1,0 +1,85 @@
+"""Semantic layer and Insight Report tests."""
+from pathlib import Path
+
+
+def _upload_sales_dataset(client, project_id: str, auth_headers: dict) -> str:
+    csv_path = Path("backend/test_storage/sales_fixture.csv")
+    csv_path.parent.mkdir(exist_ok=True)
+    csv_path.write_text(
+        "Region,Segment,Sales,Profit\n"
+        "East,Consumer,100,20\n"
+        "West,Consumer,200,50\n"
+        "East,Corporate,150,10\n",
+        encoding="utf-8",
+    )
+    with csv_path.open("rb") as handle:
+        resp = client.post(
+            f"/api/datasets/upload?project_id={project_id}",
+            files={"file": ("sales_fixture.csv", handle, "text/csv")},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
+
+
+def test_semantic_layer_seed_and_crud(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    assert any(metric["name"] == "Total Sales" for metric in layer["metrics"])
+    assert any(dim["name"] == "Region" for dim in layer["dimensions"])
+
+    metric_resp = client.post(
+        "/api/semantic/metrics",
+        json={
+            "project_id": project_id,
+            "dataset_id": dataset_id,
+            "name": "Profit Margin",
+            "expression": 'SUM("Profit") / NULLIF(SUM("Sales"), 0)',
+            "description": "Profit divided by sales.",
+        },
+        headers=auth_headers,
+    )
+    assert metric_resp.status_code == 201, metric_resp.text
+    metric_id = metric_resp.json()["id"]
+
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    assert any(metric["name"] == "Profit Margin" for metric in layer["metrics"])
+
+    delete_resp = client.delete(f"/api/semantic/metrics/{metric_id}", headers=auth_headers)
+    assert delete_resp.status_code == 200
+
+
+def test_report_generation_creates_sql_evidence(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+
+    resp = client.post(
+        "/api/reports",
+        json={"project_id": project_id, "dataset_id": dataset_id, "title": "Sales Quality Report"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    report = resp.json()
+
+    assert report["title"] == "Sales Quality Report"
+    assert report["content"]["highlights"]
+    assert report["content"]["blocks"]
+    assert "Evidence Blocks" in report["content"]["markdown"]
+    assert all("sql" in block and "policy" in block for block in report["content"]["blocks"])
+
+    list_resp = client.get(f"/api/reports/project/{project_id}", headers=auth_headers)
+    assert list_resp.status_code == 200
+    assert list_resp.json()[0]["id"] == report["id"]
+
+
+def test_analysis_memory_context_includes_recent_report(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    client.post(
+        "/api/reports",
+        json={"project_id": project_id, "dataset_id": dataset_id, "title": "Memory Seed Report"},
+        headers=auth_headers,
+    )
+
+    resp = client.get(f"/api/reports/project/{project_id}/memory", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Memory Seed Report" in resp.json()["context"]

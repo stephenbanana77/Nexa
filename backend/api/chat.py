@@ -15,6 +15,8 @@ from models.user import User
 from models.project import Project, Dataset, Conversation, Message
 from services.auth import get_current_user
 from agents.controller import AgentController
+from services.analysis_reports import analysis_memory_context
+from services.semantic_layer import semantic_context_text
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -98,9 +100,17 @@ async def chat_stream(
     schema_parts = []
     for ds in datasets:
         load_dataset(req.project_id, ds.file_path, ds.source_type)
-        engine = get_engine(req.project_id, table_name=ds.table_name)
-        cols = engine.get_schema(ds.table_name)
-        schema_parts.append(f"TABLE {ds.table_name} ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
+        engine = get_engine(req.project_id)
+        cols = engine.get_schema("data")
+        schema_parts.append(f"TABLE data ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
+    semantic_context = semantic_context_text(db, req.project_id, dataset_ids[0] if len(dataset_ids) == 1 else None)
+    memory_context = analysis_memory_context(db, req.project_id)
+    context_parts = [multi_schema]
+    if semantic_context:
+        context_parts.append(semantic_context)
+    if memory_context:
+        context_parts.append(memory_context)
+    enriched_schema = "\n\n".join(part for part in context_parts if part)
     multi_schema = "\n".join(schema_parts)
 
     # Conversation management: reuse or create
@@ -126,7 +136,14 @@ async def chat_stream(
     history = get_conversation_history(conv_id)
 
     # Run agent with history
-    controller = AgentController(req.project_id, req.message, history=history, user_id=current_user.id, dataset_id=req.dataset_id, schema_override=multi_schema if dataset_ids else None)
+    controller = AgentController(
+        req.project_id,
+        req.message,
+        history=history,
+        user_id=current_user.id,
+        dataset_id=req.dataset_id,
+        schema_override=enriched_schema if dataset_ids else None,
+    )
 
     async def event_stream():
         full_response = ""

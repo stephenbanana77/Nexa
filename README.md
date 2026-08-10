@@ -10,7 +10,9 @@ The project is intentionally scoped around one hard problem:
 
 - AST-based SQL safety layer that only allows read-only single-statement queries, blocks DDL/DML operations, applies row limits, and records policy decisions.
 - Run-level lineage that preserves the question, schema snapshot, SQL attempts, policy decisions, result samples, retries, errors, and final answer.
-- Offline evaluation harness with golden SQL cases and metrics for policy pass rate, execution success, semantic accuracy, and latency.
+- Semantic Layer for governed metrics and dimensions, so the agent can reason with business definitions instead of raw column guesses.
+- Insight Report generation that turns a dataset into a SQL-backed, Markdown-ready analysis report with highlights and evidence blocks.
+- Analysis memory that injects recent questions and report findings into follow-up analysis, supporting longer-running analysis threads.
 - LangGraph agent pipeline with SQL retry separated from system retry, reducing repeated full-pipeline retries and making failures auditable.
 - Production-oriented baseline: pytest, frontend lint/build, GitHub Actions CI, Docker Compose, Alembic migrations, route-level code splitting.
 
@@ -19,7 +21,7 @@ The project is intentionally scoped around one hard problem:
 These commands were last run locally:
 
 ```text
-backend pytest: 69 passed
+backend pytest: 72 passed
 frontend lint: passed
 frontend build: passed
 ```
@@ -41,7 +43,12 @@ The evaluation harness currently uses golden SQL as a deterministic baseline. Th
 ```mermaid
 flowchart LR
   A["Upload CSV / Excel"] --> B["Ask natural-language question"]
+  A --> S["Semantic Layer"]
+  S --> R["Insight Report"]
   B --> C["LangGraph Agent"]
+  S --> C
+  R --> M["Analysis memory"]
+  M --> C
   C --> D["Generate SQL"]
   D --> E["AST SQL Policy"]
   E -->|Allowed| F["DuckDB / MySQL execution"]
@@ -61,6 +68,9 @@ flowchart LR
 | Lineage | Make every answer reproducible and auditable | `Run.lineage` JSON and Run History evidence panel |
 | Retry control | Avoid duplicating full Agent runs for normal SQL mistakes | graph-level `sql_retry`; controller-level `system_retries` only for thrown system errors |
 | Evaluation | Measure changes instead of trusting demos | `backend/evaluation/runner.py` and golden Superstore cases |
+| Semantic layer | Stabilize business metric definitions | Metric and dimension APIs in `backend/api/semantic.py` |
+| Report generation | Convert analysis runs into reusable deliverables | SQL-backed reports in `backend/services/analysis_reports.py` |
+| Analysis memory | Preserve context across follow-up questions and reports | Conversation/report memory injected into chat context |
 
 ## Main Features
 
@@ -71,6 +81,9 @@ flowchart LR
 | Multi-dataset schema context | Working | Chat can receive multiple selected datasets |
 | SQL safety policy | Working | AST-based read-only validation, single-statement enforcement, auto-limit, risk flags |
 | Run History | Working | Step timeline plus lineage evidence chain |
+| Semantic Layer | Working | Auto-seeds metrics/dimensions from schema and supports custom business definitions |
+| Insight Reports | Working | Generates Markdown reports with SQL evidence blocks and highlights |
+| Analysis Memory | Working | Uses recent messages and reports as follow-up context |
 | Offline evaluation | Working | 12 Superstore cases, expandable to 30-50 |
 | Workflow engine | Working MVP | Save/edit/rerun analysis pipelines; still intentionally simple |
 | Skill system | Working MVP | Built-in manifest-based skills |
@@ -150,7 +163,7 @@ Nexa/
     api/             FastAPI routes
     evaluation/      Offline evaluation suites and runner
     models/          SQLAlchemy models
-    services/        Auth, run tracking, SQL policy
+    services/        Auth, run tracking, SQL policy, semantic/report services
     tests/           Backend regression tests
     tools/           DuckDB/MySQL query engines
   frontend/
@@ -167,17 +180,19 @@ Nexa/
 1. Start backend and frontend.
 2. Create a project.
 3. Upload `backend/storage/Sample - Superstore.csv`.
-4. Ask: `What is total sales by region?`
-5. Save or inspect the generated insight.
-6. Open Run History and expand the latest run.
-7. Show the evidence chain: schema hash, SQL attempts, policy decision, final SQL, sample rows, answer summary.
-8. Run the offline evaluation harness to show objective metrics.
+4. Open Semantic Layer and review the auto-seeded metrics/dimensions.
+5. Open Reports and generate an Insight Report.
+6. Ask: `What is total sales by region?`
+7. Open Run History and expand the latest run.
+8. Show the evidence chain: schema hash, SQL attempts, policy decision, final SQL, sample rows, answer summary.
+9. Run the offline evaluation harness to show objective metrics.
 
 ## Resume Bullets
 
 - Built a trustworthy AI data analysis agent with LangGraph, FastAPI, DuckDB, and React, enabling natural-language analysis over uploaded datasets with SQL-backed answers and visualizations.
 - Designed an AST-based SQL safety layer using `sqlglot`, enforcing read-only single-statement queries, blocking DDL/DML operations, applying row limits, and recording policy decisions for auditability.
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
+- Added a governed Semantic Layer and Insight Report generator, turning uploaded datasets into reusable business metrics, dimensions, Markdown reports, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
 - Hardened engineering baseline with 69 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 

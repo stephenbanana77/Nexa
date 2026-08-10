@@ -13,6 +13,8 @@ const InsightsPage = lazy(() => import("./InsightsPage"));
 const NotebookPage = lazy(() => import("./NotebookPage"));
 const RunHistoryPage = lazy(() => import("./RunHistoryPage"));
 const WorkflowPage = lazy(() => import("./WorkflowPage"));
+const SemanticLayerPage = lazy(() => import("./SemanticLayerPage"));
+const ReportsPage = lazy(() => import("./ReportsPage"));
 
 function TabFallback() {
   return (
@@ -208,6 +210,10 @@ export default function ProjectPage() {
             </div> },
           { key: "insights", label: <span>Insights</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><InsightsPage projectId={projectId!} /></Suspense></div> },
+          { key: "semantic", label: <span>Semantic Layer</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SemanticLayerPage projectId={projectId!} /></Suspense></div> },
+          { key: "reports", label: <span>Reports</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ReportsPage projectId={projectId!} /></Suspense></div> },
           { key: "notebook", label: <span>Notebook</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><NotebookPage projectId={projectId!} /></Suspense></div> },
           { key: "history", label: <span>History</span>,

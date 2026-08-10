@@ -70,6 +70,7 @@ class DuckDBEngine(DataSourceEngine):
 
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
+        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
         self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
         # Use DuckDB's native CSV reader — avoids double memory with pandas
         try:
@@ -94,6 +95,7 @@ class DuckDBEngine(DataSourceEngine):
     def register_excel(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         df = pd.read_excel(file_path)
+        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
         self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
         self.conn.execute(f"CREATE OR REPLACE TABLE {safe_name} AS SELECT * FROM df")
         self._tables.add(safe_name)

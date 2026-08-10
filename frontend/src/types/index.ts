@@ -111,6 +111,56 @@ export interface Insight {
   created_at: string;
 }
 
+// ---- Semantic Layer ----
+export interface SemanticMetric {
+  id: string;
+  dataset_id?: string | null;
+  name: string;
+  expression: string;
+  description?: string;
+  format?: string;
+  created_at?: string;
+}
+
+export interface SemanticDimension {
+  id: string;
+  dataset_id?: string | null;
+  name: string;
+  column: string;
+  description?: string;
+  created_at?: string;
+}
+
+export interface SemanticLayer {
+  metrics: SemanticMetric[];
+  dimensions: SemanticDimension[];
+}
+
+// ---- Reports ----
+export interface AnalysisReportBlock {
+  title: string;
+  sql: string;
+  columns: string[];
+  rows: unknown[][];
+  row_count: number;
+  finding?: string;
+  error?: string | null;
+}
+
+export interface AnalysisReport {
+  id: string;
+  project_id: string;
+  dataset_id?: string | null;
+  title: string;
+  content: {
+    title: string;
+    highlights: string[];
+    blocks: AnalysisReportBlock[];
+    markdown: string;
+  };
+  created_at: string;
+}
+
 // ---- Notebook ----
 export interface NotebookCell {
   id: string;

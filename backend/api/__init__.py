@@ -9,5 +9,12 @@ from .runs import router as runs_router
 from .workflows import router as workflows_router
 from .connections import router as connections_router
 from .search import router as search_router
+from .semantic import router as semantic_router
+from .reports import router as reports_router
 
-__all__ = ["auth_router", "projects_router", "chat_router", "insights_router", "notebooks_router", "skills_router", "resources_router", "runs_router", "workflows_router", "connections_router", "search_router"]
+__all__ = [
+    "auth_router", "projects_router", "chat_router", "insights_router",
+    "notebooks_router", "skills_router", "resources_router", "runs_router",
+    "workflows_router", "connections_router", "search_router",
+    "semantic_router", "reports_router",
+]
