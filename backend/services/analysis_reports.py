@@ -129,6 +129,40 @@ def _named_metric(block: dict[str, Any]) -> str:
     return str(value)
 
 
+def _number(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def _block_by_title(blocks: list[dict[str, Any]], title: str) -> dict[str, Any] | None:
+    return next((b for b in blocks if b.get("title") == title and not b.get("error")), None)
+
+
+def _value_from_row(block: dict[str, Any] | None, column: str) -> float | None:
+    if not block or not block.get("rows"):
+        return None
+    columns = block.get("columns") or []
+    if column not in columns:
+        return None
+    return _number(block["rows"][0][columns.index(column)])
+
+
+def _pick_margin_columns(numeric: list[dict]) -> tuple[str, str] | None:
+    """Return numerator and denominator columns for a margin-like metric."""
+    if len(numeric) < 2:
+        return None
+    names = [str(c["name"]) for c in numeric]
+    numerator = next((name for name in names if any(token in name.lower() for token in ("profit", "margin", "income"))), None)
+    denominator = next((name for name in names if any(token in name.lower() for token in ("sales", "revenue", "amount"))), None)
+    if numerator and denominator and numerator != denominator:
+        return numerator, denominator
+    return names[1], names[0]
+
+
 def _build_sections(
     dataset: Dataset,
     blocks: list[dict[str, Any]],
@@ -142,6 +176,10 @@ def _build_sections(
     avg_block = next((b for b in successful if b["title"].startswith("Average ")), None)
     breakdown_blocks = [b for b in successful if b["title"].startswith("Top ")]
     quality_block = next((b for b in successful if b["title"] == "Data quality snapshot"), None)
+    concentration_block = _block_by_title(blocks, "Contribution concentration")
+    margin_block = _block_by_title(blocks, "Overall margin")
+    outlier_block = _block_by_title(blocks, "Numeric outlier scan")
+    underperformer_block = next((b for b in successful if b["title"].startswith("Bottom ")), None)
 
     executive_summary = [
         f"Analyzed {dataset.row_count:,} rows across {dataset.column_count} columns from `{dataset.name}`.",
@@ -152,6 +190,12 @@ def _build_sections(
     if breakdown_blocks and breakdown_blocks[0].get("rows"):
         row = breakdown_blocks[0]["rows"][0]
         executive_summary.append(f"Leading segment in `{breakdown_blocks[0]['title']}` is `{row[0]}` with value `{row[1]}`.")
+    top_share = _value_from_row(concentration_block, "top_share_pct")
+    if top_share is not None:
+        executive_summary.append(f"The leading segment contributes {top_share:.2f}% of the primary metric, indicating {'high' if top_share >= 50 else 'moderate'} concentration.")
+    margin = _value_from_row(margin_block, "margin")
+    if margin is not None:
+        executive_summary.append(f"Overall margin is {margin:.2%}, useful as a quality lens alongside volume metrics.")
     if errors:
         executive_summary.append(f"{len(errors)} evidence block(s) failed and should be reviewed before sharing.")
 
@@ -167,6 +211,13 @@ def _build_sections(
             "label": avg_block["title"],
             "value": _named_metric(avg_block),
             "evidence_title": avg_block["title"],
+        })
+    if margin_block:
+        margin = _value_from_row(margin_block, "margin")
+        key_metrics.append({
+            "label": "Overall margin",
+            "value": f"{margin:.2%}" if margin is not None else "n/a",
+            "evidence_title": margin_block["title"],
         })
 
     segment_breakdown = [
@@ -188,6 +239,32 @@ def _build_sections(
             for idx, col in enumerate(columns)
         ]
 
+    diagnostic_insights = []
+    if concentration_block and concentration_block.get("rows"):
+        row = concentration_block["rows"][0]
+        diagnostic_insights.append({
+            "type": "concentration",
+            "title": "Metric concentration",
+            "finding": f"Top segment `{row[0]}` contributes {row[2]}% of the selected metric.",
+            "evidence_title": concentration_block["title"],
+        })
+    if underperformer_block and underperformer_block.get("rows"):
+        row = underperformer_block["rows"][0]
+        diagnostic_insights.append({
+            "type": "underperformer",
+            "title": "Lowest-performing segment",
+            "finding": f"Lowest segment in `{underperformer_block['title']}` is `{row[0]}` with value `{row[1]}`.",
+            "evidence_title": underperformer_block["title"],
+        })
+    if outlier_block and outlier_block.get("rows"):
+        row = outlier_block["rows"][0]
+        diagnostic_insights.append({
+            "type": "outlier",
+            "title": "Numeric outlier scan",
+            "finding": f"{row[0]} has min `{row[1]}`, max `{row[2]}`, avg `{row[3]}`; investigate large spread before making decisions.",
+            "evidence_title": outlier_block["title"],
+        })
+
     semantic_summary = {
         "metric_count": len(semantic.get("metrics") or []),
         "dimension_count": len(semantic.get("dimensions") or []),
@@ -204,12 +281,18 @@ def _build_sections(
         risks.append("No curated semantic metrics exist yet; report used schema-derived aggregates.")
     if errors:
         risks.append("Some evidence SQL blocks failed; inspect errors before using this report externally.")
+    if top_share is not None and top_share >= 50:
+        risks.append("Primary metric is concentrated in one segment, so aggregate performance may hide segment-level fragility.")
+    if underperformer_block and underperformer_block.get("rows"):
+        risks.append("At least one segment materially underperforms; validate whether this is expected seasonality, pricing, or data quality.")
     if not risks:
         risks.append("No critical data quality or evidence-generation risks were detected in the automated scan.")
 
     opportunities = []
     if breakdown_blocks:
         opportunities.append("Use the leading and trailing segments as follow-up analysis candidates.")
+    if margin is not None:
+        opportunities.append("Use margin as a secondary metric to avoid optimizing only for volume.")
     if semantic.get("metrics"):
         opportunities.append("Reuse curated semantic metrics for consistent future reports and chat analysis.")
     opportunities.append("Convert repeated follow-up questions into saved workflows once the analysis path stabilizes.")
@@ -219,6 +302,7 @@ def _build_sections(
         follow_up_questions.extend([
             f"Why does the top {dimensions[0]['name']} lead on {numeric[0]['name']}?",
             f"Which {dimensions[0]['name']} segments are declining or underperforming?",
+            f"What explains the gap between top and bottom {dimensions[0]['name']} segments?",
         ])
     if len(numeric) > 1:
         follow_up_questions.append(f"What is the relationship between {numeric[0]['name']} and {numeric[1]['name']}?")
@@ -229,6 +313,7 @@ def _build_sections(
         "key_metrics": key_metrics,
         "segment_breakdown": segment_breakdown,
         "data_quality": quality_findings,
+        "diagnostic_insights": diagnostic_insights,
         "semantic_summary": semantic_summary,
         "risks": risks,
         "opportunities": opportunities,
@@ -263,6 +348,15 @@ def _render_markdown(report_title: str, dataset: Dataset, sections: dict[str, An
         lines.extend(f"- {item['column']}: {item['missing_pct']}% missing" for item in sections["data_quality"])
     else:
         lines.append("- No data quality snapshot was generated.")
+
+    lines.extend(["", "## Diagnostic Insights"])
+    if sections["diagnostic_insights"]:
+        lines.extend(
+            f"- **{item['title']}**: {item['finding']} (evidence: `{item['evidence_title']}`)"
+            for item in sections["diagnostic_insights"]
+        )
+    else:
+        lines.append("- No diagnostic insight was generated.")
 
     lines.extend([
         "",
@@ -330,6 +424,27 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
             ),
         ))
+        blocks.append(_run_block(
+            project_id,
+            f"Bottom {dim} by {metric}",
+            (
+                f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
+                f"FROM data GROUP BY {_quote(dim)} ORDER BY metric ASC LIMIT 10"
+            ),
+        ))
+        blocks.append(_run_block(
+            project_id,
+            "Contribution concentration",
+            (
+                "WITH segment AS ("
+                f"SELECT {_quote(dim)} AS dimension, SUM({_quote(metric)}) AS metric "
+                f"FROM data GROUP BY {_quote(dim)}"
+                ") "
+                "SELECT dimension, ROUND(metric, 2) AS metric, "
+                "ROUND(metric * 100.0 / NULLIF((SELECT SUM(metric) FROM segment), 0), 2) AS top_share_pct "
+                "FROM segment ORDER BY metric DESC LIMIT 1"
+            ),
+        ))
 
     if len(numeric) > 1 and dimensions:
         metric = numeric[1]["name"]
@@ -340,6 +455,31 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
             (
                 f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
+            ),
+        ))
+
+    margin_columns = _pick_margin_columns(numeric)
+    if margin_columns:
+        numerator, denominator = margin_columns
+        blocks.append(_run_block(
+            project_id,
+            "Overall margin",
+            f"SELECT ROUND(SUM({_quote(numerator)}) / NULLIF(SUM({_quote(denominator)}), 0), 4) AS margin FROM data",
+        ))
+
+    if numeric:
+        metric = numeric[0]["name"]
+        metric_literal = metric.replace("'", "''")
+        blocks.append(_run_block(
+            project_id,
+            "Numeric outlier scan",
+            (
+                f"SELECT '{metric_literal}' AS metric_name, "
+                f"MIN({_quote(metric)}) AS min_value, "
+                f"MAX({_quote(metric)}) AS max_value, "
+                f"ROUND(AVG({_quote(metric)}), 2) AS avg_value, "
+                f"ROUND(STDDEV_POP({_quote(metric)}), 2) AS stddev_value "
+                "FROM data"
             ),
         ))
 

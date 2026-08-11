@@ -157,6 +157,12 @@ export interface AnalysisReportSections {
     evidence_title: string;
   }[];
   data_quality: { column: string; missing_pct: number }[];
+  diagnostic_insights: {
+    type: string;
+    title: string;
+    finding: string;
+    evidence_title: string;
+  }[];
   semantic_summary: {
     metric_count: number;
     dimension_count: number;

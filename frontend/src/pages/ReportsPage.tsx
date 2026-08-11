@@ -121,7 +121,8 @@ export default function ReportsPage({ projectId }: Props) {
               <Space wrap>
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
                 <Tag color="green">{selectedReport.content.highlights.length} highlights</Tag>
-                <Tag color="purple">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
+                <Tag color="purple">{sections?.diagnostic_insights?.length || 0} diagnostics</Tag>
+                <Tag color="cyan">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
             </div>
 
@@ -156,6 +157,27 @@ export default function ReportsPage({ projectId }: Props) {
                     />
                   </div>
                 ))}
+              </Card>
+            )}
+
+            {(sections?.diagnostic_insights?.length || 0) > 0 && (
+              <Card type="inner" title="Diagnostic Insights">
+                <List
+                  dataSource={sections!.diagnostic_insights}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={<Space><Tag color="gold">{item.type}</Tag><span>{item.title}</span></Space>}
+                        description={(
+                          <Space direction="vertical" size={4}>
+                            <Typography.Text>{item.finding}</Typography.Text>
+                            <Tag>evidence: {item.evidence_title}</Tag>
+                          </Space>
+                        )}
+                      />
+                    </List.Item>
+                  )}
+                />
               </Card>
             )}
 

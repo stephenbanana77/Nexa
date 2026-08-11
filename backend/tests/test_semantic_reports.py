@@ -65,13 +65,18 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert report["content"]["highlights"]
     assert report["content"]["sections"]["executive_summary"]
     assert report["content"]["sections"]["key_metrics"]
+    assert report["content"]["sections"]["diagnostic_insights"]
     assert report["content"]["sections"]["risks"]
     assert report["content"]["sections"]["opportunities"]
     assert report["content"]["sections"]["recommended_follow_up_questions"]
     assert report["content"]["blocks"]
     assert "Evidence Blocks" in report["content"]["markdown"]
+    assert "Diagnostic Insights" in report["content"]["markdown"]
     assert "Recommended Follow-up Questions" in report["content"]["markdown"]
     assert all("sql" in block and "policy" in block for block in report["content"]["blocks"])
+    block_titles = {block["title"] for block in report["content"]["blocks"]}
+    assert "Contribution concentration" in block_titles
+    assert "Numeric outlier scan" in block_titles
 
     list_resp = client.get(f"/api/reports/project/{project_id}", headers=auth_headers)
     assert list_resp.status_code == 200

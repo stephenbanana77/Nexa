@@ -11,7 +11,7 @@ The project is intentionally scoped around one hard problem:
 - AST-based SQL safety layer that only allows read-only single-statement queries, blocks DDL/DML operations, applies row limits, and records policy decisions.
 - Run-level lineage that preserves the question, schema snapshot, SQL attempts, policy decisions, result samples, retries, errors, and final answer.
 - Semantic Layer for governed metrics and dimensions, so the agent can reason with business definitions instead of raw column guesses.
-- Insight Report generation that turns a dataset into an analyst-style report with executive summary, key metrics, risks, opportunities, follow-up questions, and SQL evidence blocks.
+- Insight Report generation that turns a dataset into an analyst-style diagnostic report with executive summary, key metrics, contribution concentration, margin lens, outlier scan, underperforming segments, risks, opportunities, follow-up questions, and SQL evidence blocks.
 - Analysis memory that injects recent questions and report findings into follow-up analysis, supporting longer-running analysis threads.
 - Local LLM provider settings for switching between DeepSeek and Kimi/Moonshot without exposing API keys in the browser.
 - LangGraph agent pipeline with SQL retry separated from system retry, reducing repeated full-pipeline retries and making failures auditable.
@@ -83,7 +83,7 @@ flowchart LR
 | SQL safety policy | Working | AST-based read-only validation, single-statement enforcement, auto-limit, risk flags |
 | Run History | Working | Step timeline plus lineage evidence chain |
 | Semantic Layer | Working | Auto-seeds metrics/dimensions from schema and supports custom business definitions |
-| Insight Reports | Working | Generates analyst-style Markdown reports with sections, SQL evidence, risks, opportunities, and follow-ups |
+| Insight Reports | Working | Generates analyst-style diagnostic reports with concentration, margin, outlier, underperformer, risk, opportunity, follow-up, and SQL evidence sections |
 | Analysis Memory | Working | Uses recent messages and reports as follow-up context |
 | LLM Provider Settings | Working | Switch DeepSeek/Kimi, save local `.env`, test active provider without returning raw keys |
 | Demo Mode | Working | One-click Superstore project with dataset, semantic layer, and first report |
@@ -183,7 +183,7 @@ Nexa/
 1. Start backend and frontend.
 2. Click `Try Superstore Demo` on the home page.
 3. Open Semantic Layer and review the auto-seeded metrics/dimensions.
-4. Open Reports and inspect the generated executive report, risks, opportunities, follow-up questions, and SQL evidence blocks.
+4. Open Reports and inspect the generated diagnostic report: concentration, margin, outliers, underperformers, risks, opportunities, follow-up questions, and SQL evidence blocks.
 5. Configure DeepSeek or Kimi in Settings if you want live Chat.
 6. Ask: `What is total sales by region?`
 7. Open Run History and expand the latest run.
@@ -195,7 +195,7 @@ Nexa/
 - Built a trustworthy AI data analysis agent with LangGraph, FastAPI, DuckDB, and React, enabling natural-language analysis over uploaded datasets with SQL-backed answers and visualizations.
 - Designed an AST-based SQL safety layer using `sqlglot`, enforcing read-only single-statement queries, blocking DDL/DML operations, applying row limits, and recording policy decisions for auditability.
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
-- Added a governed Semantic Layer, provider settings, demo mode, and Insight Report generator, turning uploaded datasets into reusable business metrics, analyst-style reports, and SQL-backed evidence blocks.
+- Added a governed Semantic Layer, provider settings, demo mode, and diagnostic Insight Report generator, turning uploaded datasets into reusable business metrics, margin/concentration/outlier analysis, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
 - Hardened engineering baseline with 74 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 
