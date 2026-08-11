@@ -258,13 +258,13 @@ def register_mysql(project_id: str, host: str, port: int, user: str, password: s
     engine_registry.register(project_id, connector)
 
 
-def load_dataset(project_id: str, file_path: str, source_type: str) -> None:
+def load_dataset(project_id: str, file_path: str, source_type: str, table_name: str = "data") -> None:
     engine = engine_registry.get(project_id)
     if not isinstance(engine, DuckDBEngine):
         engine = DuckDBEngine()
         engine_registry.register(project_id, engine)
 
     if source_type in ("csv", ".csv"):
-        engine.register_csv(file_path)
+        engine.register_csv(file_path, table_name=table_name)
     elif source_type in ("xlsx", "xls", ".xlsx", ".xls"):
-        engine.register_excel(file_path)
+        engine.register_excel(file_path, table_name=table_name)

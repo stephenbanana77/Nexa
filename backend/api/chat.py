@@ -16,6 +16,7 @@ from models.project import Project, Dataset, Conversation, Message
 from services.auth import get_current_user
 from agents.controller import AgentController
 from services.analysis_reports import analysis_memory_context
+from services.dataset_tables import dataset_table_name
 from services.semantic_layer import semantic_context_text
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -99,10 +100,11 @@ async def chat_stream(
     from tools import get_engine, load_dataset
     schema_parts = []
     for ds in datasets:
-        load_dataset(req.project_id, ds.file_path, ds.source_type)
+        table_name = dataset_table_name(ds.id)
+        load_dataset(req.project_id, ds.file_path, ds.source_type, table_name=table_name)
         engine = get_engine(req.project_id)
-        cols = engine.get_schema("data")
-        schema_parts.append(f"TABLE data ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
+        cols = engine.get_schema(table_name)
+        schema_parts.append(f"TABLE {table_name} ({ds.name}): " + ", ".join(f"{c.name} {c.type}" for c in cols))
     multi_schema = "\n".join(schema_parts)
     semantic_context = semantic_context_text(db, req.project_id, dataset_ids[0] if len(dataset_ids) == 1 else None)
     memory_context = analysis_memory_context(db, req.project_id)

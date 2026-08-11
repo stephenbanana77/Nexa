@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Card, Empty, List, Select, Space, Spin, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, List, Select, Space, Spin, Statistic, Table, Tag, Typography, message } from "antd";
 import { FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
@@ -7,6 +7,14 @@ import type { AnalysisReport, Dataset } from "../types";
 
 interface Props {
   projectId: string;
+}
+
+function rowsToRecords(columns: string[], rows: unknown[][]) {
+  return rows.map((row, idx) => {
+    const record: Record<string, unknown> = { key: idx };
+    columns.forEach((col, colIdx) => { record[col] = row[colIdx]; });
+    return record;
+  });
 }
 
 export default function ReportsPage({ projectId }: Props) {
@@ -55,6 +63,8 @@ export default function ReportsPage({ projectId }: Props) {
       setGenerating(false);
     }
   };
+
+  const sections = selectedReport?.content.sections;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 16, padding: "12px 0" }}>
@@ -111,18 +121,63 @@ export default function ReportsPage({ projectId }: Props) {
               <Space wrap>
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
                 <Tag color="green">{selectedReport.content.highlights.length} highlights</Tag>
+                <Tag color="purple">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
             </div>
-            <Card type="inner" title="Executive Highlights">
-              {(selectedReport.content.highlights || []).map((item) => (
+
+            <Card type="inner" title="Executive Summary">
+              {(sections?.executive_summary || selectedReport.content.highlights || []).map((item) => (
                 <p key={item} style={{ margin: "6px 0" }}>• {item}</p>
               ))}
             </Card>
+
+            {(sections?.key_metrics?.length || 0) > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+                {sections!.key_metrics.map((metric) => (
+                  <Card type="inner" key={metric.label}>
+                    <Statistic title={metric.label} value={metric.value} />
+                    <Tag style={{ marginTop: 8 }}>evidence: {metric.evidence_title}</Tag>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {(sections?.segment_breakdown?.length || 0) > 0 && (
+              <Card type="inner" title="Segment Breakdown">
+                {sections!.segment_breakdown.map((segment) => (
+                  <div key={segment.title} style={{ marginBottom: 18 }}>
+                    <Typography.Text strong>{segment.title}</Typography.Text>
+                    <Table
+                      style={{ marginTop: 8 }}
+                      size="small"
+                      pagination={false}
+                      columns={segment.columns.map((col) => ({ title: col, dataIndex: col, key: col }))}
+                      dataSource={rowsToRecords(segment.columns, segment.top_rows)}
+                    />
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+              <Card type="inner" title="Risks">
+                {(sections?.risks || []).map((item) => <p key={item}>• {item}</p>)}
+              </Card>
+              <Card type="inner" title="Opportunities">
+                {(sections?.opportunities || []).map((item) => <p key={item}>• {item}</p>)}
+              </Card>
+            </div>
+
+            <Card type="inner" title="Recommended Follow-up Questions">
+              {(sections?.recommended_follow_up_questions || []).map((item) => <p key={item}>• {item}</p>)}
+            </Card>
+
             <Card type="inner" title="Report Markdown">
               <div style={{ fontSize: 16, lineHeight: 1.7 }}>
                 <ReactMarkdown>{selectedReport.content.markdown}</ReactMarkdown>
               </div>
             </Card>
+
             {selectedReport.content.blocks.map((block) => (
               <Card type="inner" key={block.title} title={block.title}>
                 <pre style={{ whiteSpace: "pre-wrap", background: "#111", padding: 12, borderRadius: 8 }}>{block.sql}</pre>
@@ -132,11 +187,7 @@ export default function ReportsPage({ projectId }: Props) {
                     size="small"
                     pagination={false}
                     columns={block.columns.map((col) => ({ title: col, dataIndex: col, key: col }))}
-                    dataSource={block.rows.map((row, idx) => {
-                      const record: Record<string, unknown> = { key: idx };
-                      block.columns.forEach((col, colIdx) => { record[col] = row[colIdx]; });
-                      return record;
-                    })}
+                    dataSource={rowsToRecords(block.columns, block.rows)}
                   />
                 )}
               </Card>

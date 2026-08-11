@@ -15,6 +15,7 @@ const RunHistoryPage = lazy(() => import("./RunHistoryPage"));
 const WorkflowPage = lazy(() => import("./WorkflowPage"));
 const SemanticLayerPage = lazy(() => import("./SemanticLayerPage"));
 const ReportsPage = lazy(() => import("./ReportsPage"));
+const SettingsPage = lazy(() => import("./SettingsPage"));
 
 function TabFallback() {
   return (
@@ -220,6 +221,8 @@ export default function ProjectPage() {
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><RunHistoryPage /></Suspense></div> },
           { key: "workflows", label: <span>Workflows</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><WorkflowPage /></Suspense></div> },
+          { key: "settings", label: <span>Settings</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SettingsPage /></Suspense></div> },
         ]}
       />
       <MySQLConnectModal

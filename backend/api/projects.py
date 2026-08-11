@@ -1,5 +1,7 @@
 """Project and Dataset API routes."""
 import os
+import shutil
+from pathlib import Path
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, SecretStr
@@ -9,6 +11,7 @@ from database import get_db
 from models.user import User
 from models.project import Project, Dataset
 from services.auth import get_current_user
+from services.dataset_tables import dataset_table_name
 from utils.config import settings
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -22,6 +25,66 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     created_at: str
+
+
+@router.post("/demo/superstore", status_code=status.HTTP_201_CREATED)
+def create_superstore_demo(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(Project).filter(
+        Project.user_id == current_user.id,
+        Project.name == "Sample - Superstore Demo",
+    ).first()
+    if existing:
+        return {"project_id": existing.id, "reused": True}
+
+    project = Project(name="Sample - Superstore Demo", user_id=current_user.id)
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    fixture_path = Path(__file__).resolve().parents[1] / "evaluation" / "fixtures" / "sample_superstore.csv"
+    if not fixture_path.exists():
+        raise HTTPException(status_code=500, detail="Demo fixture is missing")
+
+    os.makedirs(settings.STORAGE_PATH, exist_ok=True)
+    file_path = os.path.join(settings.STORAGE_PATH, f"{project.id}_sample_superstore.csv")
+    shutil.copyfile(fixture_path, file_path)
+    df = pd.read_csv(file_path, encoding="latin1")
+    schema_info = []
+    for col in df.columns:
+        schema_info.append({
+            "name": col,
+            "type": str(df[col].dtype),
+            "missing_count": int(df[col].isna().sum()),
+            "missing_pct": round(df[col].isna().mean() * 100, 1),
+        })
+
+    dataset = Dataset(
+        project_id=project.id,
+        name="Sample - Superstore.csv",
+        source_type="csv",
+        file_path=file_path,
+        row_count=len(df),
+        column_count=len(df.columns),
+        schema_info=schema_info,
+    )
+    db.add(dataset)
+    db.commit()
+    db.refresh(dataset)
+
+    from services.semantic_layer import seed_semantic_layer_from_schema
+    from services.analysis_reports import generate_report
+
+    seed_semantic_layer_from_schema(db, project.id, dataset.id, schema_info)
+    report = generate_report(db, project.id, dataset, "Superstore Executive Insight Report")
+    return {
+        "project_id": project.id,
+        "dataset_id": dataset.id,
+        "report_id": report.id,
+        "reused": False,
+    }
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
@@ -379,7 +442,7 @@ def get_dataset_relationships(
         schemas.append({
             "dataset_id": ds.id,
             "dataset_name": ds.name,
-            "table_name": "data",
+            "table_name": dataset_table_name(ds.id),
             "columns": {c.get("name"): c.get("type", "") for c in (ds.schema_info or [])},
             "row_count": ds.row_count,
         })

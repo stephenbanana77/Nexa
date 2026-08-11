@@ -1,7 +1,7 @@
 """Insight Report generation with SQL evidence and analysis memory."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -111,6 +111,190 @@ def _run_block(project_id: str, title: str, sql: str) -> dict[str, Any]:
     return block
 
 
+def _first_value(block: dict[str, Any]) -> Any:
+    rows = block.get("rows") or []
+    if not rows or not rows[0]:
+        return None
+    return rows[0][0]
+
+
+def _named_metric(block: dict[str, Any]) -> str:
+    value = _first_value(block)
+    if value is None:
+        return "n/a"
+    if isinstance(value, float):
+        return f"{value:,.2f}"
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def _build_sections(
+    dataset: Dataset,
+    blocks: list[dict[str, Any]],
+    semantic: dict,
+    numeric: list[dict],
+    dimensions: list[dict],
+) -> dict[str, Any]:
+    successful = [b for b in blocks if not b.get("error")]
+    errors = [b for b in blocks if b.get("error")]
+    total_block = next((b for b in successful if b["title"].startswith("Total ")), None)
+    avg_block = next((b for b in successful if b["title"].startswith("Average ")), None)
+    breakdown_blocks = [b for b in successful if b["title"].startswith("Top ")]
+    quality_block = next((b for b in successful if b["title"] == "Data quality snapshot"), None)
+
+    executive_summary = [
+        f"Analyzed {dataset.row_count:,} rows across {dataset.column_count} columns from `{dataset.name}`.",
+        f"Generated {len(successful)} SQL-backed evidence blocks under the current SQL safety policy.",
+    ]
+    if total_block:
+        executive_summary.append(f"Primary total metric result: {_named_metric(total_block)}.")
+    if breakdown_blocks and breakdown_blocks[0].get("rows"):
+        row = breakdown_blocks[0]["rows"][0]
+        executive_summary.append(f"Leading segment in `{breakdown_blocks[0]['title']}` is `{row[0]}` with value `{row[1]}`.")
+    if errors:
+        executive_summary.append(f"{len(errors)} evidence block(s) failed and should be reviewed before sharing.")
+
+    key_metrics = []
+    if total_block:
+        key_metrics.append({
+            "label": total_block["title"],
+            "value": _named_metric(total_block),
+            "evidence_title": total_block["title"],
+        })
+    if avg_block:
+        key_metrics.append({
+            "label": avg_block["title"],
+            "value": _named_metric(avg_block),
+            "evidence_title": avg_block["title"],
+        })
+
+    segment_breakdown = [
+        {
+            "title": block["title"],
+            "top_rows": block.get("rows", [])[:5],
+            "columns": block.get("columns", []),
+            "evidence_title": block["title"],
+        }
+        for block in breakdown_blocks
+    ]
+
+    quality_findings = []
+    if quality_block and quality_block.get("rows"):
+        row = quality_block["rows"][0]
+        columns = quality_block.get("columns", [])
+        quality_findings = [
+            {"column": col.replace("_missing_pct", ""), "missing_pct": row[idx]}
+            for idx, col in enumerate(columns)
+        ]
+
+    semantic_summary = {
+        "metric_count": len(semantic.get("metrics") or []),
+        "dimension_count": len(semantic.get("dimensions") or []),
+        "sample_metrics": semantic.get("metrics", [])[:5],
+        "sample_dimensions": semantic.get("dimensions", [])[:5],
+    }
+
+    risks = []
+    if not numeric:
+        risks.append("No numeric columns were detected, so metric analysis is limited.")
+    if not dimensions:
+        risks.append("No categorical dimensions were detected, so segmentation analysis is limited.")
+    if not semantic.get("metrics"):
+        risks.append("No curated semantic metrics exist yet; report used schema-derived aggregates.")
+    if errors:
+        risks.append("Some evidence SQL blocks failed; inspect errors before using this report externally.")
+    if not risks:
+        risks.append("No critical data quality or evidence-generation risks were detected in the automated scan.")
+
+    opportunities = []
+    if breakdown_blocks:
+        opportunities.append("Use the leading and trailing segments as follow-up analysis candidates.")
+    if semantic.get("metrics"):
+        opportunities.append("Reuse curated semantic metrics for consistent future reports and chat analysis.")
+    opportunities.append("Convert repeated follow-up questions into saved workflows once the analysis path stabilizes.")
+
+    follow_up_questions = []
+    if numeric and dimensions:
+        follow_up_questions.extend([
+            f"Why does the top {dimensions[0]['name']} lead on {numeric[0]['name']}?",
+            f"Which {dimensions[0]['name']} segments are declining or underperforming?",
+        ])
+    if len(numeric) > 1:
+        follow_up_questions.append(f"What is the relationship between {numeric[0]['name']} and {numeric[1]['name']}?")
+    follow_up_questions.append("Which rows or segments should be investigated next?")
+
+    return {
+        "executive_summary": executive_summary,
+        "key_metrics": key_metrics,
+        "segment_breakdown": segment_breakdown,
+        "data_quality": quality_findings,
+        "semantic_summary": semantic_summary,
+        "risks": risks,
+        "opportunities": opportunities,
+        "recommended_follow_up_questions": follow_up_questions,
+    }
+
+
+def _render_markdown(report_title: str, dataset: Dataset, sections: dict[str, Any], blocks: list[dict[str, Any]], semantic_lines: list[str]) -> str:
+    generated_at = datetime.now(UTC).isoformat()
+    lines = [
+        f"# {report_title}",
+        "",
+        f"Generated at: {generated_at}",
+        f"Dataset: {dataset.name} ({dataset.row_count:,} rows, {dataset.column_count} columns)",
+        "",
+        "## Executive Summary",
+        *(f"- {item}" for item in sections["executive_summary"]),
+        "",
+        "## Key Metrics",
+        *(f"- **{item['label']}**: {item['value']} (evidence: `{item['evidence_title']}`)" for item in sections["key_metrics"]),
+        "",
+        "## Segment Breakdown",
+    ]
+    if sections["segment_breakdown"]:
+        for item in sections["segment_breakdown"]:
+            lines.append(f"- **{item['title']}**: evidence block `{item['evidence_title']}`")
+    else:
+        lines.append("- No segment breakdown was generated.")
+
+    lines.extend(["", "## Data Quality"])
+    if sections["data_quality"]:
+        lines.extend(f"- {item['column']}: {item['missing_pct']}% missing" for item in sections["data_quality"])
+    else:
+        lines.append("- No data quality snapshot was generated.")
+
+    lines.extend([
+        "",
+        "## Risks",
+        *(f"- {item}" for item in sections["risks"]),
+        "",
+        "## Opportunities",
+        *(f"- {item}" for item in sections["opportunities"]),
+        "",
+        "## Recommended Follow-up Questions",
+        *(f"- {item}" for item in sections["recommended_follow_up_questions"]),
+        "",
+        "## Semantic Layer Used",
+        *(semantic_lines or ["- No semantic definitions configured yet."]),
+        "",
+        "## Evidence Blocks",
+    ])
+    for block in blocks:
+        lines.extend([
+            f"### {block['title']}",
+            "",
+            "SQL:",
+            "```sql",
+            block["sql"],
+            "```",
+            "",
+            f"Finding: {block.get('finding') or block.get('error') or 'n/a'}",
+            "",
+        ])
+    return "\n".join(lines)
+
+
 def generate_report(db: Session, project_id: str, dataset: Dataset, title: str | None = None) -> AnalysisReport:
     load_dataset(project_id, dataset.file_path, dataset.source_type)
     schema = _schema(dataset)
@@ -166,34 +350,21 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     if missing_exprs:
         blocks.append(_run_block(project_id, "Data quality snapshot", "SELECT " + ", ".join(missing_exprs) + " FROM data"))
 
-    highlights = [b["finding"] for b in blocks if b.get("finding") and not b.get("error")]
+    sections = _build_sections(dataset, blocks, semantic, numeric, dimensions)
+    highlights = sections["executive_summary"][:2] + [
+        b["finding"] for b in blocks if b.get("finding") and not b.get("error")
+    ][:4]
     semantic_lines = [
         f"- Metric `{m['name']}` = `{m['expression']}`" for m in semantic["metrics"][:8]
     ] + [
         f"- Dimension `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
-    markdown = "\n".join([
-        f"# {report_title}",
-        "",
-        f"Generated at: {datetime.utcnow().isoformat()}Z",
-        f"Dataset: {dataset.name} ({dataset.row_count} rows, {dataset.column_count} columns)",
-        "",
-        "## Executive Highlights",
-        *(f"- {item}" for item in highlights[:6]),
-        "",
-        "## Semantic Layer Used",
-        *(semantic_lines or ["- No semantic definitions configured yet."]),
-        "",
-        "## Evidence Blocks",
-        *(
-            f"### {b['title']}\n\nSQL:\n```sql\n{b['sql']}\n```\n\nFinding: {b.get('finding') or b.get('error') or 'n/a'}\n"
-            for b in blocks
-        ),
-    ])
+    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},
         "highlights": highlights,
+        "sections": sections,
         "blocks": blocks,
         "markdown": markdown,
     }

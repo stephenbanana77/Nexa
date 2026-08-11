@@ -1,5 +1,7 @@
 """Insight API tests."""
-def test_save_insight(client, auth_headers, project_id):
+
+
+def _save_insight(client, auth_headers, project_id) -> str:
     resp = client.post(f"/api/insights?project_id={project_id}", json={
         "question": "What is the average price?",
         "content": {"summary": "Average price is 20", "sql": "SELECT AVG(price) FROM data", "row_count": 100},
@@ -8,6 +10,10 @@ def test_save_insight(client, auth_headers, project_id):
     data = resp.json()
     assert "id" in data
     return data["id"]
+
+
+def test_save_insight(client, auth_headers, project_id):
+    _save_insight(client, auth_headers, project_id)
 
 
 def test_list_insights(client, auth_headers, project_id):
@@ -23,7 +29,7 @@ def test_list_insights(client, auth_headers, project_id):
 
 
 def test_delete_insight(client, auth_headers, project_id):
-    insight_id = test_save_insight(client, auth_headers, project_id)
+    insight_id = _save_insight(client, auth_headers, project_id)
     resp = client.delete(f"/api/insights/{insight_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["ok"] is True

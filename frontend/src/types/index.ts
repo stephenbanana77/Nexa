@@ -147,6 +147,27 @@ export interface AnalysisReportBlock {
   error?: string | null;
 }
 
+export interface AnalysisReportSections {
+  executive_summary: string[];
+  key_metrics: { label: string; value: string; evidence_title: string }[];
+  segment_breakdown: {
+    title: string;
+    top_rows: unknown[][];
+    columns: string[];
+    evidence_title: string;
+  }[];
+  data_quality: { column: string; missing_pct: number }[];
+  semantic_summary: {
+    metric_count: number;
+    dimension_count: number;
+    sample_metrics: SemanticMetric[];
+    sample_dimensions: SemanticDimension[];
+  };
+  risks: string[];
+  opportunities: string[];
+  recommended_follow_up_questions: string[];
+}
+
 export interface AnalysisReport {
   id: string;
   project_id: string;
@@ -155,6 +176,7 @@ export interface AnalysisReport {
   content: {
     title: string;
     highlights: string[];
+    sections: AnalysisReportSections;
     blocks: AnalysisReportBlock[];
     markdown: string;
   };

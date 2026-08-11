@@ -1,5 +1,7 @@
 """Workflow API tests."""
-def test_create_workflow(client, auth_headers, project_id):
+
+
+def _create_workflow(client, auth_headers, project_id):
     resp = client.post(f"/api/workflows", json={
         "project_id": project_id,
         "name": "My First WF",
@@ -15,15 +17,19 @@ def test_create_workflow(client, auth_headers, project_id):
     return data["id"]
 
 
+def test_create_workflow(client, auth_headers, project_id):
+    _create_workflow(client, auth_headers, project_id)
+
+
 def test_list_workflows(client, auth_headers, project_id):
-    test_create_workflow(client, auth_headers, project_id)
+    _create_workflow(client, auth_headers, project_id)
     resp = client.get(f"/api/workflows/{project_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert len(resp.json()) >= 1
 
 
 def test_get_workflow_detail(client, auth_headers, project_id):
-    wf_id = test_create_workflow(client, auth_headers, project_id)
+    wf_id = _create_workflow(client, auth_headers, project_id)
     resp = client.get(f"/api/workflows/detail/{wf_id}", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -32,7 +38,7 @@ def test_get_workflow_detail(client, auth_headers, project_id):
 
 
 def test_update_workflow(client, auth_headers, project_id):
-    wf_id = test_create_workflow(client, auth_headers, project_id)
+    wf_id = _create_workflow(client, auth_headers, project_id)
     resp = client.put(f"/api/workflows/{wf_id}", json={
         "name": "Updated WF",
         "steps": [

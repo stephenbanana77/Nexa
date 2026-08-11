@@ -31,22 +31,14 @@ export default function HomePage() {
   const createSampleProject = async () => {
     setLoading(true);
     try {
-      // Check if sample project already exists
-      const existing = projects.find((p: Project) => p.name === "Sample - Superstore");
+      const existing = projects.find((p: Project) => p.name === "Sample - Superstore Demo");
       if (existing) {
         navigate(`/project/${existing.id}`);
         return;
       }
-      const proj = await api.post("/api/projects", { name: "Sample - Superstore" });
-      const pid = proj.data.id;
-      // Use a small built-in CSV for demo
-      const csv = "Category,Sales,Profit\nFurniture,10000,2000\nOffice Supplies,15000,3500\nTechnology,25000,8000";
-      const blob = new Blob([csv], { type: "text/csv" });
-      const form = new FormData();
-      form.append("file", blob, "superstore_sample.csv");
-      await api.post(`/api/datasets/upload?project_id=${pid}`, form);
-      message.success("Sample project created! Try asking: 'Show sales by category'");
-      navigate(`/project/${pid}`);
+      const { data } = await api.post("/api/demo/superstore");
+      message.success("Demo project created with dataset, semantic layer, and report");
+      navigate(`/project/${data.project_id}`);
     } catch { message.error("Failed to create sample project"); }
     finally { setLoading(false); }
   };
@@ -147,7 +139,7 @@ export default function HomePage() {
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
               <Button type="primary" size="large" onClick={() => setModalOpen(true)}>Upload Your Data</Button>
-              <Button size="large" onClick={createSampleProject} loading={loading}>Try Sample Data</Button>
+              <Button size="large" onClick={createSampleProject} loading={loading}>Try Superstore Demo</Button>
             </div>
           </div>
         )}
