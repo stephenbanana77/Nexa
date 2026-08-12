@@ -207,6 +207,25 @@ export interface DecisionBrief {
   confidence: "low" | "medium" | "high" | string;
 }
 
+export interface AnalysisGraph {
+  nodes: {
+    id: string;
+    type: string;
+    label: string;
+    detail: string;
+    severity?: string;
+    confidence?: string;
+    status?: string;
+  }[];
+  edges: {
+    source: string;
+    target: string;
+    label: string;
+  }[];
+  entry_node: string;
+  terminal_node: string;
+}
+
 export interface AnalysisReport {
   id: string;
   project_id: string;
@@ -218,6 +237,7 @@ export interface AnalysisReport {
     sections: AnalysisReportSections;
     investigation_cards?: InvestigationCard[];
     decision_brief?: DecisionBrief;
+    analysis_graph?: AnalysisGraph;
     blocks: AnalysisReportBlock[];
     markdown: string;
   };

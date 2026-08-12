@@ -78,6 +78,8 @@ export default function ReportsPage({ projectId }: Props) {
   const sections = selectedReport?.content.sections;
   const investigationCards = selectedReport?.content.investigation_cards || [];
   const decisionBrief = selectedReport?.content.decision_brief;
+  const analysisGraph = selectedReport?.content.analysis_graph;
+  const graphNodesById = new Map((analysisGraph?.nodes || []).map((node) => [node.id, node]));
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 16, padding: "12px 0" }}>
@@ -134,6 +136,7 @@ export default function ReportsPage({ projectId }: Props) {
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
                 <Tag color="orange">{investigationCards.length} investigation cards</Tag>
                 <Tag color="magenta">{decisionBrief ? "decision brief" : "no brief"}</Tag>
+                <Tag color="lime">{analysisGraph ? `${analysisGraph.nodes.length} graph nodes` : "no graph"}</Tag>
                 <Tag color="purple">{sections?.diagnostic_insights?.length || 0} diagnostics</Tag>
                 <Tag color="cyan">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
@@ -164,6 +167,48 @@ export default function ReportsPage({ projectId }: Props) {
                     <Typography.Text strong>Next metrics:</Typography.Text>
                     {decisionBrief.next_metric_to_monitor.map((item) => <Tag color="blue" key={item}>{item}</Tag>)}
                   </Space>
+                </Space>
+              </Card>
+            )}
+
+            {analysisGraph && (
+              <Card
+                type="inner"
+                title="Analysis Graph"
+                extra={<Typography.Text type="secondary">Dataset → Finding → Hypothesis → Evidence → Decision Brief</Typography.Text>}
+              >
+                <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                  {analysisGraph.edges.slice(0, 14).map((edge, idx) => {
+                    const source = graphNodesById.get(edge.source);
+                    const target = graphNodesById.get(edge.target);
+                    return (
+                      <div
+                        key={`${edge.source}-${edge.target}-${idx}`}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 1fr) 160px minmax(0, 1fr)",
+                          gap: 8,
+                          alignItems: "center",
+                          padding: 10,
+                          border: "1px solid #333",
+                          borderRadius: 8,
+                          background: "#111",
+                        }}
+                      >
+                        <div>
+                          <Tag color="blue">{source?.type || edge.source}</Tag>
+                          <Typography.Text>{source?.label || edge.source}</Typography.Text>
+                        </div>
+                        <Typography.Text type="secondary" style={{ textAlign: "center" }}>→ {edge.label} →</Typography.Text>
+                        <div>
+                          <Tag color={target?.type === "decision_brief" ? "magenta" : target?.type === "hypothesis" ? "geekblue" : "gold"}>
+                            {target?.type || edge.target}
+                          </Tag>
+                          <Typography.Text>{target?.label || edge.target}</Typography.Text>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </Space>
               </Card>
             )}

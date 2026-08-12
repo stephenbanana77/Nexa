@@ -523,6 +523,83 @@ def _build_decision_brief(
     }
 
 
+def _build_analysis_graph(
+    dataset: Dataset,
+    semantic: dict,
+    investigation_cards: list[dict[str, Any]],
+    decision_brief: dict[str, Any],
+) -> dict[str, Any]:
+    nodes = [
+        {
+            "id": "dataset",
+            "type": "dataset",
+            "label": dataset.name,
+            "detail": f"{dataset.row_count:,} rows / {dataset.column_count} columns",
+        },
+        {
+            "id": "semantic_layer",
+            "type": "semantic_layer",
+            "label": "Semantic Layer",
+            "detail": f"{len(semantic.get('metrics') or [])} metrics / {len(semantic.get('dimensions') or [])} dimensions",
+        },
+    ]
+    edges = [
+        {"source": "dataset", "target": "semantic_layer", "label": "grounds business definitions"},
+    ]
+
+    for card_idx, card in enumerate(investigation_cards[:6], start=1):
+        finding_id = f"finding_{card_idx}"
+        evidence_id = f"evidence_{card_idx}"
+        nodes.append({
+            "id": finding_id,
+            "type": "finding",
+            "label": card["type"],
+            "detail": card["finding"],
+            "severity": card.get("severity"),
+            "confidence": card.get("confidence"),
+        })
+        nodes.append({
+            "id": evidence_id,
+            "type": "evidence",
+            "label": card.get("evidence_title") or "Evidence",
+            "detail": "SQL-backed evidence" if card.get("sql") else "Rule-based scan",
+        })
+        edges.extend([
+            {"source": "semantic_layer", "target": finding_id, "label": "guides investigation"},
+            {"source": finding_id, "target": evidence_id, "label": "validated by"},
+        ])
+        for hyp_idx, hypothesis in enumerate(card.get("hypotheses", [])[:2], start=1):
+            hypothesis_id = f"hypothesis_{card_idx}_{hyp_idx}"
+            nodes.append({
+                "id": hypothesis_id,
+                "type": "hypothesis",
+                "label": f"H{card_idx}.{hyp_idx}",
+                "detail": hypothesis["hypothesis"],
+                "status": hypothesis.get("status"),
+            })
+            edges.extend([
+                {"source": finding_id, "target": hypothesis_id, "label": "explains"},
+                {"source": hypothesis_id, "target": evidence_id, "label": "needs evidence"},
+            ])
+
+    nodes.append({
+        "id": "decision_brief",
+        "type": "decision_brief",
+        "label": "Decision Brief",
+        "detail": decision_brief.get("recommendation") or "Executive-ready summary",
+        "confidence": decision_brief.get("confidence"),
+    })
+    for card_idx, _card in enumerate(investigation_cards[:6], start=1):
+        edges.append({"source": f"finding_{card_idx}", "target": "decision_brief", "label": "summarizes"})
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "entry_node": "dataset",
+        "terminal_node": "decision_brief",
+    }
+
+
 def _render_markdown(
     report_title: str,
     dataset: Dataset,
@@ -531,6 +608,7 @@ def _render_markdown(
     semantic_lines: list[str],
     investigation_cards: list[dict[str, Any]] | None = None,
     decision_brief: dict[str, Any] | None = None,
+    analysis_graph: dict[str, Any] | None = None,
 ) -> str:
     generated_at = datetime.now(UTC).isoformat()
     lines = [
@@ -597,6 +675,15 @@ def _render_markdown(
                 lines.append(f"    - Validation: {hypothesis['validation']}")
     else:
         lines.append("- No hypotheses were generated.")
+
+    lines.extend(["", "## Analysis Graph"])
+    if analysis_graph:
+        lines.append(f"- Nodes: {len(analysis_graph.get('nodes', []))}")
+        lines.append(f"- Edges: {len(analysis_graph.get('edges', []))}")
+        for edge in analysis_graph.get("edges", [])[:12]:
+            lines.append(f"- `{edge['source']}` → `{edge['target']}`: {edge['label']}")
+    else:
+        lines.append("- No analysis graph was generated.")
 
     lines.extend([
         "",
@@ -741,7 +828,8 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     ]
     investigation_cards = _build_investigation_cards(sections, blocks)
     decision_brief = _build_decision_brief(dataset, sections, investigation_cards, numeric, dimensions)
-    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief)
+    analysis_graph = _build_analysis_graph(dataset, semantic, investigation_cards, decision_brief)
+    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief, analysis_graph)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},
@@ -749,6 +837,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         "sections": sections,
         "investigation_cards": investigation_cards,
         "decision_brief": decision_brief,
+        "analysis_graph": analysis_graph,
         "blocks": blocks,
         "markdown": markdown,
     }
