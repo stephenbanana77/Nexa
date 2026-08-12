@@ -69,6 +69,7 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert report["content"]["investigation_cards"]
     assert report["content"]["decision_brief"]
     assert report["content"]["analysis_graph"]
+    assert report["content"]["metric_contracts"]
     assert report["content"]["sections"]["risks"]
     assert report["content"]["sections"]["opportunities"]
     assert report["content"]["sections"]["recommended_follow_up_questions"]
@@ -78,6 +79,7 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert "Diagnostic Insights" in report["content"]["markdown"]
     assert "Hypothesis Engine" in report["content"]["markdown"]
     assert "Analysis Graph" in report["content"]["markdown"]
+    assert "Metric Contract Check" in report["content"]["markdown"]
     assert "Recommended Follow-up Questions" in report["content"]["markdown"]
     assert all("sql" in block and "policy" in block for block in report["content"]["blocks"])
     block_titles = {block["title"] for block in report["content"]["blocks"]}
@@ -104,12 +106,16 @@ def test_auto_investigation_creates_actionable_cards(client, project_id, auth_he
     cards = report["content"]["investigation_cards"]
     brief = report["content"]["decision_brief"]
     graph = report["content"]["analysis_graph"]
+    contracts = report["content"]["metric_contracts"]
     assert cards
     assert brief["situation"] and brief["diagnosis"] and brief["recommendation"]
     assert brief["recommended_actions"]
     assert graph["nodes"] and graph["edges"]
     assert graph["entry_node"] == "dataset"
     assert graph["terminal_node"] == "decision_brief"
+    assert contracts["contracts"]
+    assert contracts["release_gate"]["can_answer"] is True
+    assert any(contract["type"] == "metric" for contract in contracts["contracts"])
     assert all(card["finding"] and card["impact"] and card["next_question"] for card in cards)
     assert all(card["hypotheses"] for card in cards)
     assert all(hypothesis["validation"] for card in cards for hypothesis in card["hypotheses"])

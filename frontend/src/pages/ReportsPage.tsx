@@ -79,6 +79,7 @@ export default function ReportsPage({ projectId }: Props) {
   const investigationCards = selectedReport?.content.investigation_cards || [];
   const decisionBrief = selectedReport?.content.decision_brief;
   const analysisGraph = selectedReport?.content.analysis_graph;
+  const metricContracts = selectedReport?.content.metric_contracts;
   const graphNodesById = new Map((analysisGraph?.nodes || []).map((node) => [node.id, node]));
 
   return (
@@ -137,6 +138,9 @@ export default function ReportsPage({ projectId }: Props) {
                 <Tag color="orange">{investigationCards.length} investigation cards</Tag>
                 <Tag color="magenta">{decisionBrief ? "decision brief" : "no brief"}</Tag>
                 <Tag color="lime">{analysisGraph ? `${analysisGraph.nodes.length} graph nodes` : "no graph"}</Tag>
+                <Tag color={metricContracts?.status === "pass" ? "green" : "gold"}>
+                  {metricContracts ? `contracts ${metricContracts.status}` : "no contracts"}
+                </Tag>
                 <Tag color="purple">{sections?.diagnostic_insights?.length || 0} diagnostics</Tag>
                 <Tag color="cyan">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
@@ -167,6 +171,34 @@ export default function ReportsPage({ projectId }: Props) {
                     <Typography.Text strong>Next metrics:</Typography.Text>
                     {decisionBrief.next_metric_to_monitor.map((item) => <Tag color="blue" key={item}>{item}</Tag>)}
                   </Space>
+                </Space>
+              </Card>
+            )}
+
+            {metricContracts && (
+              <Card
+                type="inner"
+                title="Metric Contract Check"
+                extra={<Tag color={metricContracts.release_gate.can_answer ? "green" : "red"}>{metricContracts.release_gate.can_answer ? "answerable" : "blocked"}</Tag>}
+              >
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Typography.Paragraph>{metricContracts.summary}</Typography.Paragraph>
+                  <Typography.Text type={metricContracts.release_gate.requires_review ? "warning" : "success"}>
+                    {metricContracts.release_gate.reason}
+                  </Typography.Text>
+                  <Table
+                    size="small"
+                    pagination={false}
+                    rowKey={(record) => `${record.type}-${record.name}`}
+                    columns={[
+                      { title: "Type", dataIndex: "type", key: "type", render: (value: string) => <Tag>{value}</Tag> },
+                      { title: "Name", dataIndex: "name", key: "name" },
+                      { title: "Status", dataIndex: "status", key: "status", render: (value: string) => <Tag color={value === "pass" ? "green" : "gold"}>{value}</Tag> },
+                      { title: "Columns", dataIndex: "referenced_columns", key: "referenced_columns", render: (cols: string[]) => cols.join(", ") || "n/a" },
+                      { title: "Issues", dataIndex: "issues", key: "issues", render: (issues: string[]) => issues.length ? issues.join("; ") : "No issues" },
+                    ]}
+                    dataSource={metricContracts.contracts}
+                  />
                 </Space>
               </Card>
             )}

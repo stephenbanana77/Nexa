@@ -226,6 +226,30 @@ export interface AnalysisGraph {
   terminal_node: string;
 }
 
+export interface MetricContracts {
+  status: "pass" | "warn" | string;
+  summary: string;
+  contracts: {
+    type: "metric" | "dimension" | string;
+    name: string;
+    definition: string;
+    referenced_columns: string[];
+    status: "pass" | "warn" | string;
+    issues: string[];
+    evidence: {
+      dataset: string;
+      row_count: number;
+      max_missing_pct: number;
+      sql_policy: Record<string, unknown>;
+    };
+  }[];
+  release_gate: {
+    can_answer: boolean;
+    requires_review: boolean;
+    reason: string;
+  };
+}
+
 export interface AnalysisReport {
   id: string;
   project_id: string;
@@ -238,6 +262,7 @@ export interface AnalysisReport {
     investigation_cards?: InvestigationCard[];
     decision_brief?: DecisionBrief;
     analysis_graph?: AnalysisGraph;
+    metric_contracts?: MetricContracts;
     blocks: AnalysisReportBlock[];
     markdown: string;
   };

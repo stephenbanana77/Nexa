@@ -16,6 +16,7 @@ The project is intentionally scoped around one hard problem:
 - Hypothesis Engine that turns each finding into testable hypotheses, validation plans, current assessments, and one-click hypothesis checks.
 - Decision Brief generation that converts investigations into executive-ready situation, diagnosis, evidence, risk, recommendation, and next-metric summaries.
 - Analysis Graph that visualizes the chain from dataset and semantic layer to findings, hypotheses, SQL evidence, and decision brief.
+- Metric Contract Check that audits semantic metric/dimension definitions against dataset columns, SQL safety policy, missingness, and answerability gates.
 - Analysis memory that injects recent questions and report findings into follow-up analysis, supporting longer-running analysis threads.
 - Local LLM provider settings for switching between DeepSeek and Kimi/Moonshot without exposing API keys in the browser.
 - LangGraph agent pipeline with SQL retry separated from system retry, reducing repeated full-pipeline retries and making failures auditable.
@@ -92,6 +93,7 @@ flowchart LR
 | Hypothesis Engine | Working | Converts findings into testable hypotheses with validation plans, assessments, evidence links, and follow-up actions |
 | Decision Brief | Working | Turns investigations into executive-ready situation, diagnosis, evidence, risk, recommendation, action, and next-metric summaries |
 | Analysis Graph | Working | Visualizes Dataset → Semantic Layer → Finding → Hypothesis → Evidence → Decision Brief lineage |
+| Metric Contract Check | Working | Audits metric/dimension definitions for column existence, SQL safety, missingness, and answerability before sharing conclusions |
 | Analysis Memory | Working | Uses recent messages and reports as follow-up context |
 | LLM Provider Settings | Working | Switch DeepSeek/Kimi, save local `.env`, test active provider without returning raw keys |
 | Demo Mode | Working | One-click Superstore project with dataset, semantic layer, and first report |
@@ -191,7 +193,7 @@ Nexa/
 1. Start backend and frontend.
 2. Click `Try Superstore Demo` on the home page.
 3. Open Semantic Layer and review the auto-seeded metrics/dimensions.
-4. Open Reports and click `Start Auto Investigation` to inspect the Decision Brief, Analysis Graph, Data Detective cards, Hypothesis Engine, confidence, SQL evidence, and validation plans.
+4. Open Reports and click `Start Auto Investigation` to inspect the Decision Brief, Metric Contract Check, Analysis Graph, Data Detective cards, Hypothesis Engine, confidence, SQL evidence, and validation plans.
 5. Configure DeepSeek or Kimi in Settings if you want live Chat.
 6. Ask: `What is total sales by region?`
 7. Open Run History and expand the latest run.
@@ -203,7 +205,7 @@ Nexa/
 - Built a trustworthy AI data analysis agent with LangGraph, FastAPI, DuckDB, and React, enabling natural-language analysis over uploaded datasets with SQL-backed answers and visualizations.
 - Designed an AST-based SQL safety layer using `sqlglot`, enforcing read-only single-statement queries, blocking DDL/DML operations, applying row limits, and recording policy decisions for auditability.
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
-- Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, Auto Investigation workflow, Hypothesis Engine, Decision Brief, and Analysis Graph, turning uploaded datasets into reusable business metrics, executive-ready briefs, testable Data Detective cards, traceable analysis graphs, one-click follow-ups, and SQL-backed evidence blocks.
+- Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, Auto Investigation workflow, Hypothesis Engine, Decision Brief, Analysis Graph, and Metric Contract Check, turning uploaded datasets into reusable business metrics, executive-ready briefs, testable Data Detective cards, traceable analysis graphs, answerability gates, one-click follow-ups, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
 - Hardened engineering baseline with 75 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 

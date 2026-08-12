@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+import re
 
 from sqlalchemy.orm import Session
 
@@ -161,6 +162,84 @@ def _pick_margin_columns(numeric: list[dict]) -> tuple[str, str] | None:
     if numerator and denominator and numerator != denominator:
         return numerator, denominator
     return names[1], names[0]
+
+
+def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]) -> dict[str, Any]:
+    schema_by_name = {str(col.get("name")): col for col in schema}
+    missing_by_column = {
+        str(col.get("name")): _number(col.get("missing_pct")) or 0.0
+        for col in schema
+    }
+    contracts = []
+
+    for metric in semantic.get("metrics", []):
+        expression = str(metric.get("expression") or "")
+        referenced_columns = re.findall(r'"([^"]+)"', expression)
+        missing_columns = [name for name in referenced_columns if name not in schema_by_name]
+        policy = inspect_sql_policy(f"SELECT {expression} AS metric_value FROM data")
+        max_missing_pct = max((missing_by_column.get(name, 0.0) for name in referenced_columns), default=0.0)
+        issues = []
+        if missing_columns:
+            issues.append(f"Missing referenced columns: {', '.join(missing_columns)}")
+        if not policy.is_safe:
+            issues.append(f"Metric expression is not SQL-policy safe: {policy.reason}")
+        if not referenced_columns:
+            issues.append("Metric expression does not quote any dataset column, so lineage is weak.")
+        if max_missing_pct > 10:
+            issues.append(f"Referenced columns have up to {max_missing_pct:.2f}% missing values.")
+        contracts.append({
+            "type": "metric",
+            "name": metric.get("name"),
+            "definition": expression,
+            "referenced_columns": referenced_columns,
+            "status": "pass" if not issues else "warn",
+            "issues": issues,
+            "evidence": {
+                "dataset": dataset.name,
+                "row_count": dataset.row_count,
+                "max_missing_pct": max_missing_pct,
+                "sql_policy": policy.to_dict(),
+            },
+        })
+
+    for dimension in semantic.get("dimensions", []):
+        column = str(dimension.get("column") or "")
+        issues = []
+        if column not in schema_by_name:
+            issues.append(f"Dimension column `{column}` is missing from the dataset.")
+        missing_pct = missing_by_column.get(column, 0.0)
+        if missing_pct > 10:
+            issues.append(f"Dimension column has {missing_pct:.2f}% missing values.")
+        contracts.append({
+            "type": "dimension",
+            "name": dimension.get("name"),
+            "definition": column,
+            "referenced_columns": [column] if column else [],
+            "status": "pass" if not issues else "warn",
+            "issues": issues,
+            "evidence": {
+                "dataset": dataset.name,
+                "row_count": dataset.row_count,
+                "max_missing_pct": missing_pct,
+                "sql_policy": {"is_safe": True, "reason": "dimension column mapping"},
+            },
+        })
+
+    failed = [contract for contract in contracts if contract["status"] != "pass"]
+    return {
+        "status": "pass" if not failed else "warn",
+        "summary": (
+            f"{len(contracts) - len(failed)}/{len(contracts)} semantic contracts passed."
+            if contracts
+            else "No semantic contracts are configured for this dataset."
+        ),
+        "contracts": contracts,
+        "release_gate": {
+            "can_answer": not any("Missing referenced columns" in issue for contract in contracts for issue in contract["issues"]),
+            "requires_review": bool(failed),
+            "reason": "All metric and dimension contracts passed." if not failed else "Some metric or dimension contracts require review.",
+        },
+    }
 
 
 def _build_sections(
@@ -526,6 +605,7 @@ def _build_decision_brief(
 def _build_analysis_graph(
     dataset: Dataset,
     semantic: dict,
+    metric_contracts: dict[str, Any],
     investigation_cards: list[dict[str, Any]],
     decision_brief: dict[str, Any],
 ) -> dict[str, Any]:
@@ -542,9 +622,17 @@ def _build_analysis_graph(
             "label": "Semantic Layer",
             "detail": f"{len(semantic.get('metrics') or [])} metrics / {len(semantic.get('dimensions') or [])} dimensions",
         },
+        {
+            "id": "metric_contracts",
+            "type": "metric_contracts",
+            "label": "Metric Contract Check",
+            "detail": metric_contracts.get("summary") or "Semantic contract audit",
+            "status": metric_contracts.get("status"),
+        },
     ]
     edges = [
         {"source": "dataset", "target": "semantic_layer", "label": "grounds business definitions"},
+        {"source": "semantic_layer", "target": "metric_contracts", "label": "audits metric contracts"},
     ]
 
     for card_idx, card in enumerate(investigation_cards[:6], start=1):
@@ -565,7 +653,7 @@ def _build_analysis_graph(
             "detail": "SQL-backed evidence" if card.get("sql") else "Rule-based scan",
         })
         edges.extend([
-            {"source": "semantic_layer", "target": finding_id, "label": "guides investigation"},
+            {"source": "metric_contracts", "target": finding_id, "label": "gates investigation"},
             {"source": finding_id, "target": evidence_id, "label": "validated by"},
         ])
         for hyp_idx, hypothesis in enumerate(card.get("hypotheses", [])[:2], start=1):
@@ -609,6 +697,7 @@ def _render_markdown(
     investigation_cards: list[dict[str, Any]] | None = None,
     decision_brief: dict[str, Any] | None = None,
     analysis_graph: dict[str, Any] | None = None,
+    metric_contracts: dict[str, Any] | None = None,
 ) -> str:
     generated_at = datetime.now(UTC).isoformat()
     lines = [
@@ -638,6 +727,18 @@ def _render_markdown(
         ])
     else:
         lines.append("- No decision brief was generated.")
+
+    lines.extend(["", "## Metric Contract Check"])
+    if metric_contracts:
+        lines.append(f"- **Status**: {metric_contracts['status']}")
+        lines.append(f"- **Summary**: {metric_contracts['summary']}")
+        lines.append(f"- **Can answer**: {metric_contracts['release_gate']['can_answer']}")
+        lines.append(f"- **Requires review**: {metric_contracts['release_gate']['requires_review']}")
+        for contract in metric_contracts.get("contracts", [])[:8]:
+            issue_text = "; ".join(contract.get("issues") or ["No issues"])
+            lines.append(f"- `{contract['name']}` ({contract['type']}): {contract['status']} — {issue_text}")
+    else:
+        lines.append("- No metric contract check was generated.")
 
     lines.extend([
         "",
@@ -828,8 +929,9 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     ]
     investigation_cards = _build_investigation_cards(sections, blocks)
     decision_brief = _build_decision_brief(dataset, sections, investigation_cards, numeric, dimensions)
-    analysis_graph = _build_analysis_graph(dataset, semantic, investigation_cards, decision_brief)
-    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief, analysis_graph)
+    metric_contracts = _build_metric_contracts(dataset, semantic, schema)
+    analysis_graph = _build_analysis_graph(dataset, semantic, metric_contracts, investigation_cards, decision_brief)
+    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief, analysis_graph, metric_contracts)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},
@@ -838,6 +940,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         "investigation_cards": investigation_cards,
         "decision_brief": decision_brief,
         "analysis_graph": analysis_graph,
+        "metric_contracts": metric_contracts,
         "blocks": blocks,
         "markdown": markdown,
     }
