@@ -77,6 +77,7 @@ export default function ReportsPage({ projectId }: Props) {
 
   const sections = selectedReport?.content.sections;
   const investigationCards = selectedReport?.content.investigation_cards || [];
+  const decisionBrief = selectedReport?.content.decision_brief;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 16, padding: "12px 0" }}>
@@ -132,10 +133,40 @@ export default function ReportsPage({ projectId }: Props) {
               <Space wrap>
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
                 <Tag color="orange">{investigationCards.length} investigation cards</Tag>
+                <Tag color="magenta">{decisionBrief ? "decision brief" : "no brief"}</Tag>
                 <Tag color="purple">{sections?.diagnostic_insights?.length || 0} diagnostics</Tag>
                 <Tag color="cyan">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
             </div>
+
+            {decisionBrief && (
+              <Card
+                type="inner"
+                title="Decision Brief"
+                extra={<Tag color={decisionBrief.confidence === "high" ? "green" : "gold"}>{decisionBrief.confidence} confidence</Tag>}
+              >
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Typography.Text type="secondary">Audience: {decisionBrief.audience}</Typography.Text>
+                  <Typography.Paragraph><strong>Situation:</strong> {decisionBrief.situation}</Typography.Paragraph>
+                  <Typography.Paragraph><strong>Diagnosis:</strong> {decisionBrief.diagnosis}</Typography.Paragraph>
+                  <Typography.Paragraph><strong>Recommendation:</strong> {decisionBrief.recommendation}</Typography.Paragraph>
+                  <Typography.Paragraph><strong>Risk:</strong> {decisionBrief.risk}</Typography.Paragraph>
+                  <Space wrap>
+                    {decisionBrief.evidence.map((item) => <Tag key={item}>evidence: {item}</Tag>)}
+                  </Space>
+                  <div>
+                    <Typography.Text strong>Recommended actions</Typography.Text>
+                    {decisionBrief.recommended_actions.map((item) => (
+                      <p key={item} style={{ margin: "6px 0" }}>• {item}</p>
+                    ))}
+                  </div>
+                  <Space wrap>
+                    <Typography.Text strong>Next metrics:</Typography.Text>
+                    {decisionBrief.next_metric_to_monitor.map((item) => <Tag color="blue" key={item}>{item}</Tag>)}
+                  </Space>
+                </Space>
+              </Card>
+            )}
 
             {investigationCards.length > 0 && (
               <Card type="inner" title="Auto Investigation" extra={<Typography.Text type="secondary">Finding → Impact → Evidence → Next question</Typography.Text>}>

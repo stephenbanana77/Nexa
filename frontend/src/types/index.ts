@@ -195,6 +195,18 @@ export interface InvestigationCard {
   }[];
 }
 
+export interface DecisionBrief {
+  audience: string;
+  situation: string;
+  diagnosis: string;
+  evidence: string[];
+  risk: string;
+  recommendation: string;
+  recommended_actions: string[];
+  next_metric_to_monitor: string[];
+  confidence: "low" | "medium" | "high" | string;
+}
+
 export interface AnalysisReport {
   id: string;
   project_id: string;
@@ -205,6 +217,7 @@ export interface AnalysisReport {
     highlights: string[];
     sections: AnalysisReportSections;
     investigation_cards?: InvestigationCard[];
+    decision_brief?: DecisionBrief;
     blocks: AnalysisReportBlock[];
     markdown: string;
   };

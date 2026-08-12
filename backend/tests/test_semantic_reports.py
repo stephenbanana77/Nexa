@@ -67,11 +67,13 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert report["content"]["sections"]["key_metrics"]
     assert report["content"]["sections"]["diagnostic_insights"]
     assert report["content"]["investigation_cards"]
+    assert report["content"]["decision_brief"]
     assert report["content"]["sections"]["risks"]
     assert report["content"]["sections"]["opportunities"]
     assert report["content"]["sections"]["recommended_follow_up_questions"]
     assert report["content"]["blocks"]
     assert "Evidence Blocks" in report["content"]["markdown"]
+    assert "Decision Brief" in report["content"]["markdown"]
     assert "Diagnostic Insights" in report["content"]["markdown"]
     assert "Hypothesis Engine" in report["content"]["markdown"]
     assert "Recommended Follow-up Questions" in report["content"]["markdown"]
@@ -98,7 +100,10 @@ def test_auto_investigation_creates_actionable_cards(client, project_id, auth_he
     report = resp.json()
     assert report["title"].endswith("Auto Investigation")
     cards = report["content"]["investigation_cards"]
+    brief = report["content"]["decision_brief"]
     assert cards
+    assert brief["situation"] and brief["diagnosis"] and brief["recommendation"]
+    assert brief["recommended_actions"]
     assert all(card["finding"] and card["impact"] and card["next_question"] for card in cards)
     assert all(card["hypotheses"] for card in cards)
     assert all(hypothesis["validation"] for card in cards for hypothesis in card["hypotheses"])

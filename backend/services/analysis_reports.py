@@ -470,6 +470,59 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
     return cards[:8]
 
 
+def _build_decision_brief(
+    dataset: Dataset,
+    sections: dict[str, Any],
+    investigation_cards: list[dict[str, Any]],
+    numeric: list[dict],
+    dimensions: list[dict],
+) -> dict[str, Any]:
+    primary_card = next(
+        (card for card in investigation_cards if card.get("severity") in {"high", "medium"}),
+        investigation_cards[0] if investigation_cards else None,
+    )
+    evidence_titles = [
+        card["evidence_title"]
+        for card in investigation_cards
+        if card.get("evidence_title") and card.get("evidence_title") != "Automated opportunity scan"
+    ][:5]
+    recommended_actions = []
+    if primary_card:
+        recommended_actions.append(f"Validate the `{primary_card['type']}` finding before making a business decision.")
+        recommended_actions.extend(
+            hypothesis["next_question"]
+            for hypothesis in primary_card.get("hypotheses", [])[:2]
+        )
+    recommended_actions.extend(sections.get("recommended_follow_up_questions", [])[:2])
+
+    next_metrics = []
+    if numeric:
+        next_metrics.append(str(numeric[0]["name"]))
+    if len(numeric) > 1:
+        next_metrics.append(str(numeric[1]["name"]))
+    if dimensions:
+        next_metrics.append(f"{dimensions[0]['name']} mix")
+    if not next_metrics:
+        next_metrics.append("Data quality coverage")
+
+    return {
+        "audience": "Business owner / data lead",
+        "situation": " ".join(sections.get("executive_summary", [])[:2])
+        or f"`{dataset.name}` was analyzed for decision-ready signals.",
+        "diagnosis": primary_card["finding"] if primary_card else "No material diagnostic signal was found in the automated scan.",
+        "evidence": evidence_titles,
+        "risk": (sections.get("risks") or ["No critical automated risk was detected."])[0],
+        "recommendation": (
+            primary_card["impact"]
+            if primary_card
+            else "Use this report as a baseline and continue with targeted follow-up questions."
+        ),
+        "recommended_actions": list(dict.fromkeys(recommended_actions))[:5],
+        "next_metric_to_monitor": next_metrics[:4],
+        "confidence": primary_card.get("confidence", "medium") if primary_card else "medium",
+    }
+
+
 def _render_markdown(
     report_title: str,
     dataset: Dataset,
@@ -477,6 +530,7 @@ def _render_markdown(
     blocks: list[dict[str, Any]],
     semantic_lines: list[str],
     investigation_cards: list[dict[str, Any]] | None = None,
+    decision_brief: dict[str, Any] | None = None,
 ) -> str:
     generated_at = datetime.now(UTC).isoformat()
     lines = [
@@ -491,8 +545,27 @@ def _render_markdown(
         "## Key Metrics",
         *(f"- **{item['label']}**: {item['value']} (evidence: `{item['evidence_title']}`)" for item in sections["key_metrics"]),
         "",
+        "## Decision Brief",
+    ]
+    if decision_brief:
+        lines.extend([
+            f"- **Audience**: {decision_brief['audience']}",
+            f"- **Situation**: {decision_brief['situation']}",
+            f"- **Diagnosis**: {decision_brief['diagnosis']}",
+            f"- **Risk**: {decision_brief['risk']}",
+            f"- **Recommendation**: {decision_brief['recommendation']}",
+            f"- **Confidence**: {decision_brief['confidence']}",
+            "- **Evidence**: " + ", ".join(f"`{item}`" for item in decision_brief.get("evidence", [])),
+            "- **Next metrics to monitor**: " + ", ".join(decision_brief.get("next_metric_to_monitor", [])),
+        ])
+    else:
+        lines.append("- No decision brief was generated.")
+
+    lines.extend([
+        "",
         "## Segment Breakdown",
     ]
+    )
     if sections["segment_breakdown"]:
         for item in sections["segment_breakdown"]:
             lines.append(f"- **{item['title']}**: evidence block `{item['evidence_title']}`")
@@ -667,13 +740,15 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         f"- Dimension `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
     investigation_cards = _build_investigation_cards(sections, blocks)
-    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards)
+    decision_brief = _build_decision_brief(dataset, sections, investigation_cards, numeric, dimensions)
+    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},
         "highlights": highlights,
         "sections": sections,
         "investigation_cards": investigation_cards,
+        "decision_brief": decision_brief,
         "blocks": blocks,
         "markdown": markdown,
     }
