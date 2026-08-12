@@ -37,8 +37,8 @@ export default function HomePage() {
         return;
       }
       const { data } = await api.post("/api/demo/superstore");
-      message.success("Demo project created with dataset, semantic layer, and report");
-      navigate(`/project/${data.project_id}`);
+      message.success(data.reused ? "Opened existing Superstore demo" : "Demo project created with dataset, semantic layer, and report");
+      navigate(`/project/${data.project?.id || data.project_id}?tab=reports`);
     } catch { message.error("Failed to create sample project"); }
     finally { setLoading(false); }
   };

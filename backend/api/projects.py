@@ -37,7 +37,25 @@ def create_superstore_demo(
         Project.name == "Sample - Superstore Demo",
     ).first()
     if existing:
-        return {"project_id": existing.id, "reused": True}
+        dataset = db.query(Dataset).filter(Dataset.project_id == existing.id).order_by(Dataset.created_at.desc()).first()
+        return {
+            "project_id": existing.id,
+            "project": {
+                "id": existing.id,
+                "name": existing.name,
+                "created_at": existing.created_at.isoformat(),
+            },
+            "dataset_id": dataset.id if dataset else None,
+            "dataset": {
+                "id": dataset.id,
+                "name": dataset.name,
+                "row_count": dataset.row_count,
+                "column_count": dataset.column_count,
+            } if dataset else None,
+            "report_id": None,
+            "report": None,
+            "reused": True,
+        }
 
     project = Project(name="Sample - Superstore Demo", user_id=current_user.id)
     db.add(project)
@@ -81,8 +99,24 @@ def create_superstore_demo(
     report = generate_report(db, project.id, dataset, "Superstore Executive Insight Report")
     return {
         "project_id": project.id,
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "created_at": project.created_at.isoformat(),
+        },
         "dataset_id": dataset.id,
+        "dataset": {
+            "id": dataset.id,
+            "name": dataset.name,
+            "row_count": dataset.row_count,
+            "column_count": dataset.column_count,
+        },
         "report_id": report.id,
+        "report": {
+            "id": report.id,
+            "title": report.title,
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+        },
         "reused": False,
     }
 

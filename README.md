@@ -133,6 +133,15 @@ python main.py
 
 Backend API: `http://localhost:8000`
 
+If local requests behave inconsistently after code changes, stop stale dev servers before restarting:
+
+```powershell
+netstat -ano | Select-String ':8000|:5173'
+Stop-Process -Id <PID> -Force
+```
+
+`python main.py` runs Uvicorn with reload enabled, so Windows may show a parent and child Python process. Make sure old listeners are gone before retesting the Superstore demo or Auto Investigation.
+
 ### Frontend
 
 ```powershell
