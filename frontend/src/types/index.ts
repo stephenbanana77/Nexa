@@ -184,6 +184,15 @@ export interface InvestigationCard {
   sql?: string | null;
   confidence: "low" | "medium" | "high" | string;
   next_question: string;
+  hypotheses?: {
+    hypothesis: string;
+    validation: string;
+    status: "proposed" | "needs_validation" | "supported" | "rejected" | string;
+    current_assessment: string;
+    evidence_title: string;
+    supporting_evidence?: string;
+    next_question: string;
+  }[];
 }
 
 export interface AnalysisReport {

@@ -325,6 +325,75 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
     cards: list[dict[str, Any]] = []
     block_map = {block.get("title"): block for block in blocks}
 
+    def hypotheses_for(insight: dict[str, Any], block: dict[str, Any]) -> list[dict[str, Any]]:
+        insight_type = insight.get("type")
+        evidence_title = insight.get("evidence_title")
+        base = {
+            "status": "needs_validation",
+            "evidence_title": evidence_title,
+            "supporting_evidence": block.get("finding") or insight.get("finding"),
+        }
+        if insight_type == "concentration":
+            return [
+                {
+                    **base,
+                    "hypothesis": "The leading segment may be structurally larger than the rest of the portfolio.",
+                    "validation": "Compare the leading segment against the long-tail distribution and check whether the share is above an acceptable concentration threshold.",
+                    "current_assessment": "Partially supported by the contribution concentration evidence; causal explanation still needs segment context.",
+                    "next_question": "Break down the leading segment by the next available dimension and compare its margin.",
+                },
+                {
+                    **base,
+                    "hypothesis": "The concentration may be driven by one metric dimension rather than broad business strength.",
+                    "validation": "Cross-check the leading segment on a second numeric metric, such as profit or margin, before treating it as healthy growth.",
+                    "current_assessment": "Needs validation with a secondary metric.",
+                    "next_question": "Does the leading segment also lead on profit or margin?",
+                },
+            ]
+        if insight_type == "underperformer":
+            return [
+                {
+                    **base,
+                    "hypothesis": "The lowest-performing segment may have demand, pricing, or operational weakness.",
+                    "validation": "Compare bottom and top segments across the primary metric and a secondary metric.",
+                    "current_assessment": "Supported as a performance gap; root cause is not yet proven.",
+                    "next_question": "Compare the lowest-performing segment with the top segment across all numeric metrics.",
+                },
+                {
+                    **base,
+                    "hypothesis": "The low result may be expected because the segment has fewer records or lower exposure.",
+                    "validation": "Normalize by row count or order count to distinguish scale from performance quality.",
+                    "current_assessment": "Needs normalization before action.",
+                    "next_question": "Normalize the primary metric by row count for each segment.",
+                },
+            ]
+        if insight_type == "outlier":
+            return [
+                {
+                    **base,
+                    "hypothesis": "Extreme records may be distorting aggregate metrics and averages.",
+                    "validation": "Inspect top and bottom records for the numeric metric and compare median vs average.",
+                    "current_assessment": "Supported by the spread scan; record-level drivers still need investigation.",
+                    "next_question": "Show the top and bottom records driving the numeric outliers.",
+                },
+                {
+                    **base,
+                    "hypothesis": "The outlier spread may indicate data quality issues such as miscoded values or mixed units.",
+                    "validation": "Check missing values, negative values, and unusually large values in the affected metric.",
+                    "current_assessment": "Needs data-quality validation.",
+                    "next_question": "Check whether the outlier metric has missing, negative, or unusually large values.",
+                },
+            ]
+        return [
+            {
+                **base,
+                "hypothesis": "This finding may point to a meaningful business pattern.",
+                "validation": "Validate it with a follow-up segmentation and a second metric.",
+                "current_assessment": "Needs validation.",
+                "next_question": "Segment this finding further and compare it with another metric.",
+            }
+        ]
+
     for insight in sections.get("diagnostic_insights", []):
         evidence_title = insight["evidence_title"]
         block = block_map.get(evidence_title, {})
@@ -347,6 +416,7 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             "sql": block.get("sql"),
             "confidence": "high" if block and not block.get("error") else "low",
             "next_question": next_question,
+            "hypotheses": hypotheses_for(insight, block),
         })
 
     if sections.get("risks"):
@@ -360,6 +430,17 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             "sql": None,
             "confidence": "medium",
             "next_question": "Which risks could materially change the conclusion?",
+            "hypotheses": [
+                {
+                    "hypothesis": "The main risk could materially change the report conclusion.",
+                    "validation": "Identify which evidence block or data-quality issue would change the decision if corrected.",
+                    "status": "needs_validation",
+                    "current_assessment": "Needs review before external sharing.",
+                    "evidence_title": "Automated risk scan",
+                    "supporting_evidence": sections["risks"][0],
+                    "next_question": "Which evidence block is most sensitive to this risk?",
+                }
+            ],
         })
 
     if sections.get("opportunities"):
@@ -373,12 +454,30 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             "sql": None,
             "confidence": "medium",
             "next_question": "Turn this opportunity into a concrete next analysis step.",
+            "hypotheses": [
+                {
+                    "hypothesis": "The opportunity can become a reusable analysis workflow.",
+                    "validation": "Run the suggested follow-up and save the SQL-backed path if it remains useful.",
+                    "status": "proposed",
+                    "current_assessment": "Actionable as a next analysis step.",
+                    "evidence_title": "Automated opportunity scan",
+                    "supporting_evidence": sections["opportunities"][0],
+                    "next_question": "Convert this opportunity into a repeatable analysis workflow.",
+                }
+            ],
         })
 
     return cards[:8]
 
 
-def _render_markdown(report_title: str, dataset: Dataset, sections: dict[str, Any], blocks: list[dict[str, Any]], semantic_lines: list[str]) -> str:
+def _render_markdown(
+    report_title: str,
+    dataset: Dataset,
+    sections: dict[str, Any],
+    blocks: list[dict[str, Any]],
+    semantic_lines: list[str],
+    investigation_cards: list[dict[str, Any]] | None = None,
+) -> str:
     generated_at = datetime.now(UTC).isoformat()
     lines = [
         f"# {report_title}",
@@ -414,6 +513,17 @@ def _render_markdown(report_title: str, dataset: Dataset, sections: dict[str, An
         )
     else:
         lines.append("- No diagnostic insight was generated.")
+
+    lines.extend(["", "## Hypothesis Engine"])
+    if investigation_cards:
+        for card in investigation_cards:
+            lines.append(f"- **{card['type']}**: {card['finding']}")
+            for hypothesis in card.get("hypotheses", [])[:3]:
+                lines.append(f"  - Hypothesis: {hypothesis['hypothesis']}")
+                lines.append(f"    - Current assessment: {hypothesis['current_assessment']}")
+                lines.append(f"    - Validation: {hypothesis['validation']}")
+    else:
+        lines.append("- No hypotheses were generated.")
 
     lines.extend([
         "",
@@ -556,8 +666,8 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     ] + [
         f"- Dimension `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
-    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines)
     investigation_cards = _build_investigation_cards(sections, blocks)
+    markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},

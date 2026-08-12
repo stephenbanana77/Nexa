@@ -178,6 +178,41 @@ export default function ReportsPage({ projectId }: Props) {
                           }]}
                         />
                       )}
+                      {(card.hypotheses?.length || 0) > 0 && (
+                        <Collapse
+                          size="small"
+                          style={{ marginTop: 12 }}
+                          items={[{
+                            key: "hypotheses",
+                            label: `Hypothesis Engine (${card.hypotheses!.length})`,
+                            children: (
+                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                {card.hypotheses!.map((hypothesis, hypIdx) => (
+                                  <Card key={`${card.type}-hypothesis-${hypIdx}`} size="small">
+                                    <Space wrap style={{ marginBottom: 8 }}>
+                                      <Tag color="geekblue">H{hypIdx + 1}</Tag>
+                                      <Tag>{hypothesis.status}</Tag>
+                                      <Tag>evidence: {hypothesis.evidence_title}</Tag>
+                                    </Space>
+                                    <Typography.Paragraph strong style={{ marginBottom: 6 }}>
+                                      {hypothesis.hypothesis}
+                                    </Typography.Paragraph>
+                                    <Typography.Paragraph type="secondary" style={{ marginBottom: 6 }}>
+                                      Assessment: {hypothesis.current_assessment}
+                                    </Typography.Paragraph>
+                                    <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                                      Validation: {hypothesis.validation}
+                                    </Typography.Paragraph>
+                                    <Button size="small" onClick={() => askFollowUp(hypothesis.next_question)}>
+                                      Validate this hypothesis
+                                    </Button>
+                                  </Card>
+                                ))}
+                              </Space>
+                            ),
+                          }]}
+                        />
+                      )}
                       <Button icon={<QuestionCircleOutlined />} style={{ marginTop: 12 }} onClick={() => askFollowUp(card.next_question)} block>
                         Ask follow-up
                       </Button>

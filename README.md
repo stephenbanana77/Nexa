@@ -13,6 +13,7 @@ The project is intentionally scoped around one hard problem:
 - Semantic Layer for governed metrics and dimensions, so the agent can reason with business definitions instead of raw column guesses.
 - Insight Report generation that turns a dataset into an analyst-style diagnostic report with executive summary, key metrics, contribution concentration, margin lens, outlier scan, underperforming segments, risks, opportunities, follow-up questions, and SQL evidence blocks.
 - Auto Investigation workflow that proactively creates Data Detective cards with finding, impact, SQL evidence, confidence, and one-click follow-up questions.
+- Hypothesis Engine that turns each finding into testable hypotheses, validation plans, current assessments, and one-click hypothesis checks.
 - Analysis memory that injects recent questions and report findings into follow-up analysis, supporting longer-running analysis threads.
 - Local LLM provider settings for switching between DeepSeek and Kimi/Moonshot without exposing API keys in the browser.
 - LangGraph agent pipeline with SQL retry separated from system retry, reducing repeated full-pipeline retries and making failures auditable.
@@ -86,6 +87,7 @@ flowchart LR
 | Semantic Layer | Working | Auto-seeds metrics/dimensions from schema and supports custom business definitions |
 | Insight Reports | Working | Generates analyst-style diagnostic reports with concentration, margin, outlier, underperformer, risk, opportunity, follow-up, and SQL evidence sections |
 | Auto Investigation | Working | Proactively creates Data Detective cards with finding, impact, evidence, confidence, and one-click follow-up |
+| Hypothesis Engine | Working | Converts findings into testable hypotheses with validation plans, assessments, evidence links, and follow-up actions |
 | Analysis Memory | Working | Uses recent messages and reports as follow-up context |
 | LLM Provider Settings | Working | Switch DeepSeek/Kimi, save local `.env`, test active provider without returning raw keys |
 | Demo Mode | Working | One-click Superstore project with dataset, semantic layer, and first report |
@@ -185,7 +187,7 @@ Nexa/
 1. Start backend and frontend.
 2. Click `Try Superstore Demo` on the home page.
 3. Open Semantic Layer and review the auto-seeded metrics/dimensions.
-4. Open Reports and click `Start Auto Investigation` to inspect Data Detective cards: concentration, margin, outliers, underperformers, risks, opportunities, confidence, and SQL evidence.
+4. Open Reports and click `Start Auto Investigation` to inspect Data Detective cards plus Hypothesis Engine: concentration, margin, outliers, underperformers, risks, opportunities, confidence, SQL evidence, and validation plans.
 5. Configure DeepSeek or Kimi in Settings if you want live Chat.
 6. Ask: `What is total sales by region?`
 7. Open Run History and expand the latest run.
@@ -197,7 +199,7 @@ Nexa/
 - Built a trustworthy AI data analysis agent with LangGraph, FastAPI, DuckDB, and React, enabling natural-language analysis over uploaded datasets with SQL-backed answers and visualizations.
 - Designed an AST-based SQL safety layer using `sqlglot`, enforcing read-only single-statement queries, blocking DDL/DML operations, applying row limits, and recording policy decisions for auditability.
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
-- Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, and Auto Investigation workflow, turning uploaded datasets into reusable business metrics, Data Detective cards, one-click follow-ups, and SQL-backed evidence blocks.
+- Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, Auto Investigation workflow, and Hypothesis Engine, turning uploaded datasets into reusable business metrics, testable Data Detective cards, one-click follow-ups, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
 - Hardened engineering baseline with 75 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 
