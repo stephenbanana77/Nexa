@@ -174,6 +174,18 @@ export interface AnalysisReportSections {
   recommended_follow_up_questions: string[];
 }
 
+export interface InvestigationCard {
+  type: string;
+  severity: "low" | "medium" | "high" | string;
+  finding: string;
+  impact: string;
+  evidence_title: string;
+  evidence_preview: unknown[][];
+  sql?: string | null;
+  confidence: "low" | "medium" | "high" | string;
+  next_question: string;
+}
+
 export interface AnalysisReport {
   id: string;
   project_id: string;
@@ -183,6 +195,7 @@ export interface AnalysisReport {
     title: string;
     highlights: string[];
     sections: AnalysisReportSections;
+    investigation_cards?: InvestigationCard[];
     blocks: AnalysisReportBlock[];
     markdown: string;
   };

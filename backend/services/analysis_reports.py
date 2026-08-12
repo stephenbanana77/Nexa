@@ -321,6 +321,63 @@ def _build_sections(
     }
 
 
+def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    block_map = {block.get("title"): block for block in blocks}
+
+    for insight in sections.get("diagnostic_insights", []):
+        evidence_title = insight["evidence_title"]
+        block = block_map.get(evidence_title, {})
+        next_question = {
+            "concentration": "Why is the primary metric concentrated in the leading segment?",
+            "underperformer": "What explains the lowest-performing segment and how does it compare with the top segment?",
+            "outlier": "Which records or segments are driving the numeric outliers?",
+        }.get(insight.get("type"), "What should we investigate next?")
+        cards.append({
+            "type": insight["type"],
+            "severity": "high" if insight["type"] in {"concentration", "outlier"} else "medium",
+            "finding": insight["finding"],
+            "impact": {
+                "concentration": "Aggregate results may hide dependency on one segment; validate whether growth is diversified.",
+                "underperformer": "Low-performing groups are immediate candidates for pricing, operations, or data-quality review.",
+                "outlier": "Large numeric spread can distort averages and should be checked before decisions are made.",
+            }.get(insight["type"], "This finding is a candidate for deeper analysis."),
+            "evidence_title": evidence_title,
+            "evidence_preview": block.get("rows", [])[:3],
+            "sql": block.get("sql"),
+            "confidence": "high" if block and not block.get("error") else "low",
+            "next_question": next_question,
+        })
+
+    if sections.get("risks"):
+        cards.append({
+            "type": "risk",
+            "severity": "medium",
+            "finding": sections["risks"][0],
+            "impact": "This is the main caveat to mention before sharing the analysis externally.",
+            "evidence_title": "Automated risk scan",
+            "evidence_preview": [],
+            "sql": None,
+            "confidence": "medium",
+            "next_question": "Which risks could materially change the conclusion?",
+        })
+
+    if sections.get("opportunities"):
+        cards.append({
+            "type": "opportunity",
+            "severity": "low",
+            "finding": sections["opportunities"][0],
+            "impact": "This turns the report from a static summary into a next-step analysis workflow.",
+            "evidence_title": "Automated opportunity scan",
+            "evidence_preview": [],
+            "sql": None,
+            "confidence": "medium",
+            "next_question": "Turn this opportunity into a concrete next analysis step.",
+        })
+
+    return cards[:8]
+
+
 def _render_markdown(report_title: str, dataset: Dataset, sections: dict[str, Any], blocks: list[dict[str, Any]], semantic_lines: list[str]) -> str:
     generated_at = datetime.now(UTC).isoformat()
     lines = [
@@ -500,11 +557,13 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         f"- Dimension `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
     markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines)
+    investigation_cards = _build_investigation_cards(sections, blocks)
     content = {
         "title": report_title,
         "dataset": {"id": dataset.id, "name": dataset.name, "rows": dataset.row_count, "columns": dataset.column_count},
         "highlights": highlights,
         "sections": sections,
+        "investigation_cards": investigation_cards,
         "blocks": blocks,
         "markdown": markdown,
     }

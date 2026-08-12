@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Input, message, Select } from "antd";
 import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined, DownloadOutlined, CopyOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
@@ -53,6 +53,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([]);
   const [datasets, setDatasets] = useState<{id: string; name: string}[]>([]);
   const [relationships, setRelationships] = useState<any>(null);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     if (!projectId) return;
@@ -66,6 +67,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
       setRelationships(data);
     }).catch(() => {});
   }, [projectId]);
+
+  useEffect(() => {
+    const question = searchParams.get("question");
+    if (question) setInput(question);
+  }, [searchParams]);
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
   const [showProgress, setShowProgress] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);

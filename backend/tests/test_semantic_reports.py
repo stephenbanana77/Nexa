@@ -66,6 +66,7 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert report["content"]["sections"]["executive_summary"]
     assert report["content"]["sections"]["key_metrics"]
     assert report["content"]["sections"]["diagnostic_insights"]
+    assert report["content"]["investigation_cards"]
     assert report["content"]["sections"]["risks"]
     assert report["content"]["sections"]["opportunities"]
     assert report["content"]["sections"]["recommended_follow_up_questions"]
@@ -81,6 +82,24 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     list_resp = client.get(f"/api/reports/project/{project_id}", headers=auth_headers)
     assert list_resp.status_code == 200
     assert list_resp.json()[0]["id"] == report["id"]
+
+
+def test_auto_investigation_creates_actionable_cards(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+
+    resp = client.post(
+        "/api/reports/investigate",
+        json={"project_id": project_id, "dataset_id": dataset_id},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 201, resp.text
+    report = resp.json()
+    assert report["title"].endswith("Auto Investigation")
+    cards = report["content"]["investigation_cards"]
+    assert cards
+    assert all(card["finding"] and card["impact"] and card["next_question"] for card in cards)
+    assert any(card["sql"] for card in cards)
 
 
 def test_analysis_memory_context_includes_recent_report(client, project_id, auth_headers):

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Card, Empty, List, Select, Space, Spin, Statistic, Table, Tag, Typography, message } from "antd";
-import { FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import { Button, Card, Collapse, Empty, List, Select, Space, Spin, Statistic, Table, Tag, Typography, message } from "antd";
+import { FileSearchOutlined, FileTextOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
 import type { AnalysisReport, Dataset } from "../types";
@@ -18,12 +19,14 @@ function rowsToRecords(columns: string[], rows: unknown[][]) {
 }
 
 export default function ReportsPage({ projectId }: Props) {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<AnalysisReport[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | undefined>();
   const [selectedReport, setSelectedReport] = useState<AnalysisReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,9 +36,9 @@ export default function ReportsPage({ projectId }: Props) {
         api.get(`/api/datasets?project_id=${projectId}`),
       ]);
       const list = Array.isArray(reportData) ? reportData : [];
+      const ds = datasetResp.items || datasetResp || [];
       setReports(list);
       setSelectedReport((prev) => prev || list[0] || null);
-      const ds = datasetResp.items || datasetResp || [];
       setDatasets(ds);
       setSelectedDatasetId((prev) => prev || ds[0]?.id);
     } finally {
@@ -47,32 +50,37 @@ export default function ReportsPage({ projectId }: Props) {
     load().catch(() => message.error("Failed to load reports"));
   }, [load]);
 
-  const generate = async () => {
-    setGenerating(true);
+  const createReport = async (mode: "report" | "investigation") => {
+    const isInvestigation = mode === "investigation";
+    if (isInvestigation) setInvestigating(true);
+    else setGenerating(true);
     try {
-      const { data } = await api.post("/api/reports", {
+      const { data } = await api.post(isInvestigation ? "/api/reports/investigate" : "/api/reports", {
         project_id: projectId,
         dataset_id: selectedDatasetId,
       });
       setReports((prev) => [data, ...prev]);
       setSelectedReport(data);
-      message.success("Insight Report generated");
+      message.success(isInvestigation ? "Auto Investigation completed" : "Insight Report generated");
     } catch (err: any) {
-      message.error(err.response?.data?.detail || "Report generation failed");
+      message.error(err.response?.data?.detail || (isInvestigation ? "Investigation failed" : "Report generation failed"));
     } finally {
+      setInvestigating(false);
       setGenerating(false);
     }
   };
 
+  const askFollowUp = (question: string) => {
+    const params = new URLSearchParams({ tab: "chat", question });
+    navigate(`/project/${projectId}?${params.toString()}`);
+  };
+
   const sections = selectedReport?.content.sections;
+  const investigationCards = selectedReport?.content.investigation_cards || [];
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 16, padding: "12px 0" }}>
-      <Card
-        title="Insight Reports"
-        extra={<Button icon={<ReloadOutlined />} onClick={load} />}
-        style={{ minHeight: 520 }}
-      >
+      <Card title="Data Detective" extra={<Button icon={<ReloadOutlined />} onClick={load} />} style={{ minHeight: 520 }}>
         <Space direction="vertical" style={{ width: "100%" }}>
           <Select
             placeholder="Dataset"
@@ -81,15 +89,18 @@ export default function ReportsPage({ projectId }: Props) {
             options={datasets.map((d) => ({ label: d.name, value: d.id }))}
             style={{ width: "100%" }}
           />
-          <Button type="primary" icon={<FileTextOutlined />} loading={generating} onClick={generate} block>
-            Generate report
+          <Button type="primary" icon={<FileSearchOutlined />} loading={investigating} onClick={() => createReport("investigation")} block>
+            Start Auto Investigation
+          </Button>
+          <Button icon={<FileTextOutlined />} loading={generating} onClick={() => createReport("report")} block>
+            Generate classic report
           </Button>
         </Space>
         {loading ? <Spin style={{ marginTop: 24 }} /> : (
           <List
             style={{ marginTop: 20 }}
             dataSource={reports}
-            locale={{ emptyText: <Empty description="No reports yet" /> }}
+            locale={{ emptyText: <Empty description="No investigations yet" /> }}
             renderItem={(item) => (
               <List.Item
                 onClick={() => setSelectedReport(item)}
@@ -113,18 +124,68 @@ export default function ReportsPage({ projectId }: Props) {
 
       <Card>
         {!selectedReport ? (
-          <Empty description="Generate a report to see SQL-backed findings" />
+          <Empty description="Start Auto Investigation to see SQL-backed findings" />
         ) : (
           <Space direction="vertical" size={20} style={{ width: "100%" }}>
             <div>
               <Typography.Title level={3} style={{ marginTop: 0 }}>{selectedReport.title}</Typography.Title>
               <Space wrap>
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
-                <Tag color="green">{selectedReport.content.highlights.length} highlights</Tag>
+                <Tag color="orange">{investigationCards.length} investigation cards</Tag>
                 <Tag color="purple">{sections?.diagnostic_insights?.length || 0} diagnostics</Tag>
                 <Tag color="cyan">{sections?.recommended_follow_up_questions?.length || 0} follow-ups</Tag>
               </Space>
             </div>
+
+            {investigationCards.length > 0 && (
+              <Card type="inner" title="Auto Investigation" extra={<Typography.Text type="secondary">Finding → Impact → Evidence → Next question</Typography.Text>}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                  {investigationCards.map((card, idx) => (
+                    <Card
+                      key={`${card.type}-${idx}`}
+                      size="small"
+                      title={<Space wrap><Tag color={card.severity === "high" ? "red" : card.severity === "medium" ? "gold" : "blue"}>{card.severity}</Tag><span>{card.type}</span></Space>}
+                      extra={<Tag color={card.confidence === "high" ? "green" : "default"}>{card.confidence} confidence</Tag>}
+                    >
+                      <Typography.Paragraph style={{ marginBottom: 8 }}>{card.finding}</Typography.Paragraph>
+                      <Typography.Text type="secondary">{card.impact}</Typography.Text>
+                      <div style={{ marginTop: 12 }}><Tag>evidence: {card.evidence_title}</Tag></div>
+                      {card.sql && (
+                        <Collapse
+                          size="small"
+                          style={{ marginTop: 12 }}
+                          items={[{
+                            key: "evidence",
+                            label: "Show SQL evidence",
+                            children: (
+                              <>
+                                <pre style={{ whiteSpace: "pre-wrap", background: "#111", padding: 12, borderRadius: 8 }}>{card.sql}</pre>
+                                {card.evidence_preview?.length > 0 && (
+                                  <Table
+                                    size="small"
+                                    pagination={false}
+                                    columns={["value_1", "value_2", "value_3"].map((col) => ({ title: col, dataIndex: col, key: col }))}
+                                    dataSource={card.evidence_preview.map((row, rowIdx) => ({
+                                      key: rowIdx,
+                                      value_1: row[0],
+                                      value_2: row[1],
+                                      value_3: row[2],
+                                    }))}
+                                  />
+                                )}
+                              </>
+                            ),
+                          }]}
+                        />
+                      )}
+                      <Button icon={<QuestionCircleOutlined />} style={{ marginTop: 12 }} onClick={() => askFollowUp(card.next_question)} block>
+                        Ask follow-up
+                      </Button>
+                    </Card>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             <Card type="inner" title="Executive Summary">
               {(sections?.executive_summary || selectedReport.content.highlights || []).map((item) => (
@@ -160,27 +221,6 @@ export default function ReportsPage({ projectId }: Props) {
               </Card>
             )}
 
-            {(sections?.diagnostic_insights?.length || 0) > 0 && (
-              <Card type="inner" title="Diagnostic Insights">
-                <List
-                  dataSource={sections!.diagnostic_insights}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <List.Item.Meta
-                        title={<Space><Tag color="gold">{item.type}</Tag><span>{item.title}</span></Space>}
-                        description={(
-                          <Space direction="vertical" size={4}>
-                            <Typography.Text>{item.finding}</Typography.Text>
-                            <Tag>evidence: {item.evidence_title}</Tag>
-                          </Space>
-                        )}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            )}
-
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
               <Card type="inner" title="Risks">
                 {(sections?.risks || []).map((item) => <p key={item}>• {item}</p>)}
@@ -191,7 +231,9 @@ export default function ReportsPage({ projectId }: Props) {
             </div>
 
             <Card type="inner" title="Recommended Follow-up Questions">
-              {(sections?.recommended_follow_up_questions || []).map((item) => <p key={item}>• {item}</p>)}
+              {(sections?.recommended_follow_up_questions || []).map((item) => (
+                <p key={item}>• {item} <Button size="small" type="link" onClick={() => askFollowUp(item)}>Ask</Button></p>
+              ))}
             </Card>
 
             <Card type="inner" title="Report Markdown">

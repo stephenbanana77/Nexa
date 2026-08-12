@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Tabs, Upload, Button, Table, Select, message, Spin, Modal } from "antd";
 import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
@@ -55,6 +55,7 @@ interface ProjectInfo {
 export default function ProjectPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [project, setProject] = useState<ProjectInfo | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
@@ -162,7 +163,16 @@ export default function ProjectPage() {
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate("/")} style={{ color: "#888" }} />
         <span style={{ color: "#fff", fontWeight: 500, fontSize: 17 }}>{project.name}</span>
       </div>
-      <Tabs defaultActiveKey="chat" style={{ padding: "0 24px" }} tabBarStyle={{ borderBottom: "1px solid #333" }}
+      <Tabs
+        activeKey={searchParams.get("tab") || "chat"}
+        onChange={(key) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("tab", key);
+          if (key !== "chat") next.delete("question");
+          setSearchParams(next);
+        }}
+        style={{ padding: "0 24px" }}
+        tabBarStyle={{ borderBottom: "1px solid #333" }}
         items={[
           { key: "chat", label: <span style={{ color: "#60a5fa" }}>Chat</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ChatPage projectId={projectId!} /></Suspense></div> },

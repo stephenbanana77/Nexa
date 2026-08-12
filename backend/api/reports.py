@@ -42,6 +42,24 @@ def create_report(
     return serialize_report(report)
 
 
+@router.post("/investigate", status_code=status.HTTP_201_CREATED)
+def create_auto_investigation(
+    req: ReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _assert_project(db, req.project_id, current_user.id)
+    dataset_query = db.query(Dataset).filter(Dataset.project_id == req.project_id)
+    if req.dataset_id:
+        dataset_query = dataset_query.filter(Dataset.id == req.dataset_id)
+    dataset = dataset_query.order_by(Dataset.created_at.desc()).first()
+    if not dataset:
+        raise HTTPException(status_code=400, detail="No dataset available for investigation")
+    title = req.title or f"{dataset.name} Auto Investigation"
+    report = generate_report(db, req.project_id, dataset, title)
+    return serialize_report(report)
+
+
 @router.get("/project/{project_id}")
 def list_reports(
     project_id: str,
