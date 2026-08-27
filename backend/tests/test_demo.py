@@ -30,3 +30,6 @@ def test_superstore_demo_report_contains_investigation_artifacts(client, auth_he
     assert report["content"]["analysis_graph"]
     assert report["content"]["metric_contracts"]
     assert report["content"]["investigation_cards"]
+    metric_names = {metric["name"] for metric in report["semantic_snapshot"]["metrics"]}
+    assert "Total Row ID" not in metric_names
+    assert "Total Postal Code" not in metric_names

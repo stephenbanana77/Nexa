@@ -3,6 +3,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from database import Base, engine
 from models import User, ApiKey, Project, Dataset, Conversation, Message, Insight, Chart, Notebook, Cell, Skill, SkillExecution, Resource, ResourceReference, Run, RunStep, Workflow, WorkflowStep, SemanticMetric, SemanticDimension, AnalysisReport
@@ -64,13 +65,16 @@ async def health_check():
 async def readiness_check():
     """Readiness probe: verifies database connectivity."""
     from database.session import SessionLocal
+    db = None
     try:
         db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
+        db.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database not ready: {str(e)}")
+    finally:
+        if db is not None:
+            db.close()
 
 
 if __name__ == "__main__":

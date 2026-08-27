@@ -86,7 +86,13 @@ def create_connection(
 def list_connections(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    project = db.query(Project).filter(
+        Project.id == project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     from resources.registry import list_resources
     resources = list_resources(project_id, resource_type="connection")
     return resources
@@ -97,7 +103,16 @@ def delete_connection(
     project_id: str,
     conn_id: str,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    from resources.registry import delete_resource
-    delete_resource(f"connection://{conn_id}")
+    project = db.query(Project).filter(
+        Project.id == project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from resources.registry import get_resource, delete_resource
+    resource = get_resource(f"connection://{conn_id}")
+    if not resource or resource.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    delete_resource(resource["uri"])
     return {"status": "deleted"}

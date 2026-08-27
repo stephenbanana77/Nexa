@@ -6,6 +6,20 @@ from sqlalchemy.orm import Session
 from models.project import SemanticDimension, SemanticMetric
 
 
+_TECHNICAL_FIELD_TOKENS = (
+    "id", "code", "key", "index", "row", "zip", "postal", "latitude", "longitude",
+)
+
+
+def _is_technical_numeric_field(name: str) -> bool:
+    """Avoid treating identifiers and location codes as additive business metrics."""
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    tokens = set(normalized.split("_"))
+    return bool(tokens.intersection(_TECHNICAL_FIELD_TOKENS)) or any(
+        normalized.startswith(prefix) for prefix in ("row", "index", "postal", "zip")
+    )
+
+
 def list_semantic_layer(
     db: Session,
     project_id: str,
@@ -95,7 +109,7 @@ def seed_semantic_layer_from_schema(
         dtype = str(col.get("type", "")).lower()
         if not name:
             continue
-        if any(token in dtype for token in numeric_tokens):
+        if any(token in dtype for token in numeric_tokens) and not _is_technical_numeric_field(name):
             metric_name = f"Total {name}"
             if metric_name.lower() not in existing_metrics:
                 db.add(SemanticMetric(

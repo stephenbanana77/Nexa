@@ -131,6 +131,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
       const decoder = new TextDecoder();
       let buffer = "";
       let finalData: Record<string, unknown> = {};
+      let streamFailed = false;
       let credibilityMeta = { rows_queried: 0, sql_retries: 0, mode: "sql" as string, data_coverage: "unknown" as string };
 
       while (reader) {
@@ -185,6 +186,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 setShowProgress(true);
                 setLoading(true);
               } else if (eventName === "error") {
+                streamFailed = true;
                 setShowProgress(false);
                 message.error(data.message || "Analysis failed");
               }
@@ -192,6 +194,8 @@ export default function ChatPage({ projectId }: { projectId: string }) {
           }
         }
       }
+
+      if (streamFailed) return;
 
       const finalSummary = String(finalData.summary || "Analysis complete");
       const finalSql = finalData.sql as string | undefined;

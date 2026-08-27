@@ -133,3 +133,24 @@ def test_analysis_memory_context_includes_recent_report(client, project_id, auth
     resp = client.get(f"/api/reports/project/{project_id}/memory", headers=auth_headers)
     assert resp.status_code == 200
     assert "Memory Seed Report" in resp.json()["context"]
+
+
+def test_notebook_cells_require_project_ownership(client, project_id, auth_headers):
+    notebook = client.post(
+        "/api/notebooks/",
+        json={"project_id": project_id, "name": "Private notebook", "cells": [{"cell_type": "python", "content": "print(1)"}]},
+        headers=auth_headers,
+    ).json()
+    cell_id = client.get(f"/api/notebooks/{notebook['id']}", headers=auth_headers).json()["cells"][0]["id"]
+
+    client.post("/api/auth/register", json={"email": "other@nexa.io", "password": "test1234"})
+    other_login = client.post("/api/auth/login", json={"email": "other@nexa.io", "password": "test1234"})
+    other_headers = {"Authorization": f"Bearer {other_login.json()['token']}"}
+
+    assert client.put(f"/api/notebooks/cells/{cell_id}", json={"content": "print(2)"}, headers=other_headers).status_code == 404
+    assert client.post(f"/api/notebooks/cells/{cell_id}/execute", headers=other_headers).status_code == 404
+
+
+def test_readiness_probe_works_with_sqlalchemy_2(client):
+    response = client.get("/api/health/ready")
+    assert response.status_code == 200, response.text

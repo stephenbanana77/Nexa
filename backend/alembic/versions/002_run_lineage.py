@@ -16,8 +16,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("runs", sa.Column("lineage", sa.JSON(), nullable=True))
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("runs") and "lineage" not in {c["name"] for c in inspector.get_columns("runs")}:
+        op.add_column("runs", sa.Column("lineage", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("runs", "lineage")
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("runs") and "lineage" in {c["name"] for c in inspector.get_columns("runs")}:
+        op.drop_column("runs", "lineage")

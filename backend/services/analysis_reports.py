@@ -21,6 +21,28 @@ def _is_numeric(dtype: str) -> bool:
     return any(token in dtype.lower() for token in ("int", "float", "double", "decimal", "number"))
 
 
+def _is_technical_field(name: str) -> bool:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    tokens = set(normalized.split("_"))
+    return bool(tokens.intersection({"id", "code", "key", "index", "row", "zip", "postal"}))
+
+
+def _business_numeric_columns(schema: list[dict]) -> list[dict]:
+    numeric = [c for c in schema if _is_numeric(str(c.get("type", "")))]
+    usable = [c for c in numeric if not _is_technical_field(str(c.get("name", "")))]
+    # Prefer common business measures when several candidates remain.
+    priority = ("sales", "revenue", "amount", "profit", "income", "quantity", "count")
+    return sorted(usable, key=lambda c: next(
+        (i for i, token in enumerate(priority) if token in str(c.get("name", "")).lower()),
+        len(priority),
+    ))
+
+
+def _business_dimensions(schema: list[dict]) -> list[dict]:
+    dimensions = [c for c in schema if not _is_numeric(str(c.get("type", "")))]
+    return sorted(dimensions, key=lambda c: 1 if _is_technical_field(str(c.get("name", ""))) else 0)
+
+
 def _schema(dataset: Dataset) -> list[dict]:
     return list(dataset.schema_info or [])
 
@@ -820,8 +842,8 @@ def _render_markdown(
 def generate_report(db: Session, project_id: str, dataset: Dataset, title: str | None = None) -> AnalysisReport:
     load_dataset(project_id, dataset.file_path, dataset.source_type)
     schema = _schema(dataset)
-    numeric = [c for c in schema if _is_numeric(str(c.get("type", "")))]
-    dimensions = [c for c in schema if not _is_numeric(str(c.get("type", "")))]
+    numeric = _business_numeric_columns(schema)
+    dimensions = _business_dimensions(schema)
     semantic = list_semantic_layer(db, project_id, dataset.id)
     memory = _recent_memory(db, project_id)
 

@@ -95,6 +95,24 @@ class CellUpdate(BaseModel):
     content: str | None = None
 
 
+def _get_owned_notebook(db: Session, notebook_id: str, user_id: str) -> Notebook:
+    notebook = db.query(Notebook).join(Project).filter(
+        Notebook.id == notebook_id, Project.user_id == user_id
+    ).first()
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return notebook
+
+
+def _get_owned_cell(db: Session, cell_id: str, user_id: str) -> Cell:
+    cell = db.query(Cell).join(Notebook).join(Project).filter(
+        Cell.id == cell_id, Project.user_id == user_id
+    ).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    return cell
+
+
 @router.put("/cells/{cell_id}")
 def update_cell(
     cell_id: str,
@@ -102,9 +120,7 @@ def update_cell(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    cell = db.query(Cell).filter(Cell.id == cell_id).first()
-    if not cell:
-        raise HTTPException(status_code=404, detail="Cell not found")
+    cell = _get_owned_cell(db, cell_id, current_user.id)
     if req.cell_type is not None:
         cell.cell_type = req.cell_type
     if req.content is not None:
@@ -120,9 +136,7 @@ def add_cell(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    nb = db.query(Notebook).filter(Notebook.id == notebook_id).first()
-    if not nb:
-        raise HTTPException(status_code=404, detail="Notebook not found")
+    nb = _get_owned_notebook(db, notebook_id, current_user.id)
     cell = Cell(notebook_id=notebook_id, cell_type=req.cell_type, content=req.content, sort_order=req.sort_order)
     db.add(cell)
     db.commit()
@@ -132,9 +146,7 @@ def add_cell(
 
 @router.delete("/cells/{cell_id}")
 def delete_cell(cell_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    cell = db.query(Cell).filter(Cell.id == cell_id).first()
-    if not cell:
-        raise HTTPException(status_code=404, detail="Cell not found")
+    cell = _get_owned_cell(db, cell_id, current_user.id)
     db.delete(cell)
     db.commit()
     return {"ok": True}
@@ -147,9 +159,7 @@ def execute_python_cell(
     db: Session = Depends(get_db),
 ):
     """Execute a Python cell in a restricted sandbox."""
-    cell = db.query(Cell).filter(Cell.id == cell_id).first()
-    if not cell:
-        raise HTTPException(status_code=404, detail="Cell not found")
+    cell = _get_owned_cell(db, cell_id, current_user.id)
     if cell.cell_type != "python":
         raise HTTPException(status_code=400, detail="Only Python cells can be executed")
 
