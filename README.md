@@ -222,6 +222,8 @@ Nexa/
 
 Nexa is still a portfolio-grade project, not an enterprise BI platform.
 
+本项目的真实业务使用复核见：[真实业务使用问题审查报告](docs/真实业务使用问题审查报告.md)。
+
 - The evaluation suite has 12 deterministic golden cases and should be expanded to 30-50 cases.
 - Token usage is still estimated, not provider-reported.
 - Workflow execution is an MVP and does not yet support branching, scheduling, or durable resumability.
