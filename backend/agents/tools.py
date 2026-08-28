@@ -77,30 +77,63 @@ def _suggest_chart_tool(query_result: QueryResult) -> dict[str, Any] | None:
     if not columns or not rows:
         return None
 
-    if len(columns) == 2 and len(rows) > 0:
+    def as_number(value: Any) -> float | None:
+        if value is None:
+            return None
         try:
-            float(str(rows[0][1]).replace(",", ""))
-            return {
-                "type": "bar",
-                "title": f"{columns[1]} by {columns[0]}",
-                "options": {
-                    "tooltip": {"trigger": "axis"},
-                    "xAxis": {
-                        "type": "category",
-                        "data": [str(r[0])[:20] for r in rows[:20]],
-                    },
-                    "yAxis": {"type": "value"},
-                    "series": [{
-                        "name": columns[1],
-                        "type": "bar",
-                        "data": [float(str(r[1]).replace(",", "")) if r[1] is not None else 0 for r in rows[:20]],
-                        "itemStyle": {"color": "#2563EB"},
-                    }],
-                },
-            }
-        except (ValueError, IndexError):
-            pass
-    return None
+            return float(str(value).replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    sample = rows[:20]
+    # Pick a categorical axis and include up to three numeric result columns.
+    category_idx = next(
+        (
+            idx
+            for idx in range(len(columns))
+            if any(as_number(row[idx] if idx < len(row) else None) is None for row in sample)
+        ),
+        0,
+    )
+    numeric_indexes = [
+        idx for idx in range(len(columns))
+        if idx != category_idx
+        and any(as_number(row[idx] if idx < len(row) else None) is not None for row in sample)
+    ][:3]
+    if not numeric_indexes:
+        return None
+
+    chart_type = "line" if any(
+        token in columns[category_idx].lower()
+        for token in ("date", "time", "month", "quarter", "year", "日期", "时间", "月份", "季度")
+    ) else "bar"
+    palette = ["#2563EB", "#16A34A", "#D97706"]
+    series = [
+        {
+            "name": columns[idx],
+            "type": chart_type,
+            "data": [
+                as_number(row[idx] if idx < len(row) else None) or 0
+                for row in sample
+            ],
+            "itemStyle": {"color": palette[pos]},
+        }
+        for pos, idx in enumerate(numeric_indexes)
+    ]
+    return {
+        "type": chart_type,
+        "title": f"{'、'.join(columns[idx] for idx in numeric_indexes)} by {columns[category_idx]}",
+        "options": {
+            "tooltip": {"trigger": "axis"},
+            "legend": {"data": [item["name"] for item in series]},
+            "xAxis": {
+                "type": "category",
+                "data": [str(row[category_idx])[:20] for row in sample],
+            },
+            "yAxis": {"type": "value"},
+            "series": series,
+        },
+    }
 
 
 # Register built-in tools

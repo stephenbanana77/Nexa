@@ -137,7 +137,7 @@ async def test_agent_controller_records_system_retry(monkeypatch, project_id):
     async def fake_run_agent(*args, **kwargs):
         calls["count"] += 1
         if calls["count"] == 1:
-            raise RuntimeError("LLM provider timeout")
+            raise RuntimeError("unexpected system failure")
         yield {"event": "querying", "sql": "SELECT * FROM data LIMIT 10"}
         yield {
             "event": "insight",

@@ -185,10 +185,10 @@ export default function ChatPage({ projectId }: { projectId: string }) {
                 resetStages();
                 setShowProgress(true);
                 setLoading(true);
-              } else if (eventName === "error") {
+              } else if (eventName === "error" || eventName === "timeout") {
                 streamFailed = true;
                 setShowProgress(false);
-                const detail = data.message;
+                const detail = data.message || "Analysis timed out";
                 const errorText = typeof detail === "string"
                   ? detail
                   : Array.isArray(detail)

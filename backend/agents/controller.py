@@ -66,6 +66,7 @@ class AgentController:
                 "done": "compose",
             }
             token_estimate = 0
+            run_failed = False
 
             try:
                 async for event in run_agent(
@@ -130,6 +131,9 @@ class AgentController:
                             tracker.complete_step(sid, output_summary=(event.get("message", "") or "")[:200])
                             if node_name == "insight":
                                 token_estimate += 500
+                                if str(event.get("summary", "")).startswith("Skill execution failed:"):
+                                    run_failed = True
+                                    tracker.fail(event.get("summary"))
                                 tracker.update_lineage({
                                     "final_sql": event.get("sql"),
                                     "result": {
@@ -149,6 +153,8 @@ class AgentController:
 
                     yield event
 
+                if run_failed:
+                    return
                 tracker.complete(token_estimate=token_estimate)
                 return
 
@@ -156,6 +162,13 @@ class AgentController:
                 tracker.fail("Analysis cancelled")
                 raise
             except Exception as exc:
+                # Retrying the whole Agent after a provider timeout multiplies
+                # latency and can create several long-running model calls.
+                if "timed out" in str(exc).lower() or "timeout" in str(exc).lower():
+                    message = "LLM provider timed out; analysis was stopped without a full-pipeline retry."
+                    tracker.fail(message)
+                    yield {"event": "timeout", "message": message, "progress": 100}
+                    return
                 tracker.update_lineage({
                     "system_retries": [{
                         "attempt": attempt + 1,

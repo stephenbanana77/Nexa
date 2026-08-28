@@ -8,7 +8,9 @@ SKILL_KEYWORDS = {
     "data_summary": ("概览", "摘要", "整体情况", "数据总结", "summary"),
     "correlation_analysis": ("相关性", "相关系数", "correlation"),
     "trend_analysis": ("趋势", "按月", "按季度", "环比", "同比", "trend"),
-    "top_bottom_finder": ("排行", "排名", "最高", "最低", "top", "bottom", "前十", "后十"),
+    # Do not route ordinary questions containing “最高/最低”; require an
+    # explicit ranking intent so Skill failures never replace a valid SQL path.
+    "top_bottom_finder": ("排行", "排名", "top", "bottom", "前十", "后十", "top 10", "bottom 10"),
 }
 
 

@@ -157,6 +157,12 @@ async def chat_stream(
         try:
             async for event in controller.run():
                 last_event = event
+                if event.get("event") in ("error", "timeout"):
+                    yield {
+                        "event": event["event"],
+                        "data": json.dumps(event, default=str),
+                    }
+                    return
                 if event["event"] == "insight":
                     full_response = event.get("summary", "")
                 yield {
