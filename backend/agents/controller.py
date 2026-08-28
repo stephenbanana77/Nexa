@@ -24,6 +24,8 @@ class AgentController:
         user_id: str = None,
         dataset_id: str = None,
         schema_override: str = None,
+        input_row_count: int | None = None,
+        input_column_count: int | None = None,
     ):
         self.project_id = project_id
         self.question = user_question
@@ -31,6 +33,8 @@ class AgentController:
         self._user_id = user_id
         self._dataset_id = dataset_id
         self._schema_override = schema_override
+        self._input_row_count = input_row_count
+        self._input_column_count = input_column_count
         self.run_ids: list[str] = []
 
     async def run(self) -> AsyncGenerator[dict, None]:
@@ -70,8 +74,14 @@ class AgentController:
                     self.history,
                     self._dataset_id,
                     schema_override=self._schema_override,
+                    input_row_count=self._input_row_count,
+                    input_column_count=self._input_column_count,
                 ):
                     node_name = event.get("event", "")
+                    if node_name == "timeout":
+                        tracker.fail(event.get("message"))
+                        yield event
+                        return
                     step_key = node_name
                     if node_name in ("querying", "sql_retry", "sql_failed"):
                         step_key = f"{node_name}:{len(step_ids)}"
@@ -125,6 +135,8 @@ class AgentController:
                                     "result": {
                                         "columns": event.get("columns", []),
                                         "row_count": event.get("row_count", 0),
+                                        "source_row_count": event.get("total_rows"),
+                                        "source_column_count": event.get("total_columns"),
                                         "sample_rows": event.get("rows", [])[:10],
                                     },
                                     "answer": {
@@ -140,6 +152,9 @@ class AgentController:
                 tracker.complete(token_estimate=token_estimate)
                 return
 
+            except asyncio.CancelledError:
+                tracker.fail("Analysis cancelled")
+                raise
             except Exception as exc:
                 tracker.update_lineage({
                     "system_retries": [{
@@ -166,6 +181,8 @@ class AgentController:
             "question_sanitized": question_sanitized,
             "project_id": self.project_id,
             "dataset_id": self._dataset_id,
+            "input_row_count": self._input_row_count,
+            "input_column_count": self._input_column_count,
             "attempt": attempt + 1,
             "schema": {
                 "text": schema,

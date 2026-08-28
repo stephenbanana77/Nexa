@@ -1,7 +1,4 @@
-import json
-import re
 from agents.state import AgentState
-from agents.llm import chat
 from agents.prompts import CAPABILITY_DENIAL
 
 
@@ -32,23 +29,9 @@ def plan_steps(state: AgentState) -> dict:
             "capability_denied": True,
         }
 
-    prompt = f"""为以下问题规划 SQL 分析步骤。输出一个 JSON 字符串数组。
-
-数据集 schema：
-{schema}
-
-问题：{question}
-
-只返回 JSON 字符串数组，如：["步骤1", "步骤2"]
-保持 1-3 步。如果单条 SQL 能回答，只输出 1 步。"""
-
-    response = chat([{"role": "user", "content": prompt}])
-    try:
-        json_match = re.search(r"\[.*?\]", response, re.DOTALL)
-        plan = json.loads(json_match.group(0)) if json_match else ["Analyze data"]
-    except Exception:
-        plan = ["Analyze data"]
-
+    # Keep the plan shape for lineage; SQL generation is the only model call on
+    # the normal one-question path.
+    plan = [question]
     return {
         "plan": plan,
         "current_step": 0,

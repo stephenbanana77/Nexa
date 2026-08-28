@@ -47,7 +47,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ project_id: projectId, params: {} }),
+        body: JSON.stringify({ project_id: projectId, dataset_id: selectedDataset, params: {} }),
       });
 
       const reader = response.body?.getReader();

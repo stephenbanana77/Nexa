@@ -89,8 +89,18 @@ def build_agent_graph() -> StateGraph:
 _agent_graph = build_agent_graph()
 
 
-async def run_agent(project_id: str, question: str, history: list[dict] = None, dataset_id: str = None, schema_override: str = None) -> AsyncGenerator[dict[str, Any], None]:
+async def run_agent(
+    project_id: str,
+    question: str,
+    history: list[dict] = None,
+    dataset_id: str = None,
+    schema_override: str = None,
+    input_row_count: int | None = None,
+    input_column_count: int | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
     """Run the LangGraph agent and yield streaming events."""
+    import asyncio
+    from utils.config import settings
     from agents.sanitizer import sanitize_user_input, sanitize_schema
 
     clean_question, was_flagged = sanitize_user_input(question)
@@ -104,6 +114,10 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None, 
         "messages": [],
         "project_id": project_id,
         "question": clean_question,
+        "dataset_id": dataset_id,
+        "input_row_count": input_row_count,
+        "input_column_count": input_column_count,
+        "intent": "query",
         "schema": schema,
         "conversation_history": history or [],
         "plan": [],
@@ -134,57 +148,67 @@ async def run_agent(project_id: str, question: str, history: list[dict] = None, 
 
     current_state: dict = dict(initial_state)
 
-    async for event in _agent_graph.astream(initial_state, stream_mode="updates"):
-        for node_name, node_state in event.items():
-            current_state.update(node_state)
+    try:
+        async with asyncio.timeout(settings.AGENT_TIMEOUT_SEC):
+            async for event in _agent_graph.astream(initial_state, stream_mode="updates"):
+                for node_name, node_state in event.items():
+                    current_state.update(node_state)
 
-            if node_name in node_events:
-                event_name, message = node_events[node_name]
+                    if node_name in node_events:
+                        event_name, message = node_events[node_name]
 
-                event_data = {"event": event_name, "message": message}
+                        event_data = {"event": event_name, "message": message}
 
-                if node_name == "execute_skill":
-                    event_data["progress"] = 40
-                    event_data["skill"] = current_state.get("selected_skill", "")
+                        if node_name == "execute_skill":
+                            event_data["progress"] = 40
+                            event_data["skill"] = current_state.get("selected_skill", "")
 
-                elif node_name == "execute":
-                    event_data["sql"] = current_state.get("sql", "")
-                    if current_state.get("sql_error"):
-                        event_data["sql_error"] = current_state.get("sql_error", "")
-                        event_data["retry_count"] = current_state.get("retry_count", 0)
-                        if current_state.get("next_action") == "generate_sql":
-                            event_data["event"] = "sql_retry"
-                            event_data["message"] = "SQL failed; regenerating query..."
-                        elif current_state.get("next_action") == "compose":
-                            event_data["event"] = "sql_failed"
-                            event_data["message"] = current_state.get("sql_error", "")
-                    event_data["progress"] = 50
+                        elif node_name == "execute":
+                            event_data["sql"] = current_state.get("sql", "")
+                            if current_state.get("sql_error"):
+                                event_data["sql_error"] = current_state.get("sql_error", "")
+                                event_data["retry_count"] = current_state.get("retry_count", 0)
+                                if current_state.get("next_action") == "generate_sql":
+                                    event_data["event"] = "sql_retry"
+                                    event_data["message"] = "SQL failed; regenerating query..."
+                                elif current_state.get("next_action") == "compose":
+                                    event_data["event"] = "sql_failed"
+                                    event_data["message"] = current_state.get("sql_error", "")
+                            event_data["progress"] = 50
 
-                elif node_name == "analyze":
-                    err = current_state.get("sql_error", "")
-                    if err:
-                        event_data["event"] = "error"
-                        event_data["message"] = err
-                    event_data["progress"] = 70
+                        elif node_name == "analyze":
+                            err = current_state.get("sql_error", "")
+                            if err:
+                                event_data["event"] = "error"
+                                event_data["message"] = err
+                            event_data["progress"] = 70
 
-                elif node_name == "visualize":
-                    event_data["chart_config"] = current_state.get("chart_config")
-                    event_data["progress"] = 85
+                        elif node_name == "visualize":
+                            event_data["chart_config"] = current_state.get("chart_config")
+                            event_data["progress"] = 85
 
-                elif node_name == "compose":
-                    result = current_state.get("query_result", {})
-                    event_data = {
-                        "event": "insight",
-                        "message": (current_state.get("summary", "") or "")[:200],
-                        "progress": 95,
-                        "sql": current_state.get("sql", ""),
-                        "columns": result.get("columns", []),
-                        "rows": result.get("rows", [])[:50],
-                        "row_count": result.get("row_count", 0),
-                        "summary": current_state.get("summary", ""),
-                        "charts": [current_state["chart_config"]] if current_state.get("chart_config") else [],
-                    }
+                        elif node_name == "compose":
+                            result = current_state.get("query_result", {})
+                            event_data = {
+                                "event": "insight",
+                                "message": (current_state.get("summary", "") or "")[:200],
+                                "progress": 95,
+                                "sql": current_state.get("sql", ""),
+                                "columns": result.get("columns", []),
+                                "rows": result.get("rows", [])[:50],
+                                "row_count": result.get("row_count", 0),
+                                "total_rows": current_state.get("input_row_count"),
+                                "total_columns": current_state.get("input_column_count"),
+                                "summary": current_state.get("summary", ""),
+                                "charts": [current_state["chart_config"]] if current_state.get("chart_config") else [],
+                            }
 
-                yield event_data
+                        yield event_data
 
-    yield {"event": "done", "message": "Analysis complete", "progress": 100}
+        yield {"event": "done", "message": "Analysis complete", "progress": 100}
+    except TimeoutError:
+        yield {
+            "event": "timeout",
+            "message": f"Analysis exceeded the {settings.AGENT_TIMEOUT_SEC}s deadline.",
+            "progress": 100,
+        }

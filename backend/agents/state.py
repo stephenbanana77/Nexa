@@ -8,6 +8,10 @@ class AgentState(TypedDict):
     messages: Annotated[list[dict], add_messages]
     project_id: str
     question: str
+    dataset_id: str | None
+    input_row_count: int | None
+    input_column_count: int | None
+    intent: str
 
     # Context
     schema: str

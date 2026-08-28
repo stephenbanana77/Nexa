@@ -79,7 +79,11 @@ class Settings:
         return self.DEEPSEEK_MODEL
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4096"))
-    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
+    # Keep individual provider calls bounded. The Agent has a separate overall deadline.
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "45"))
+    AGENT_TIMEOUT_SEC: int = int(os.getenv("AGENT_TIMEOUT_SEC", "150"))
+    SKILL_TIMEOUT_SEC: int = int(os.getenv("SKILL_TIMEOUT_SEC", "120"))
+    SKILL_STEP_TIMEOUT_SEC: int = int(os.getenv("SKILL_STEP_TIMEOUT_SEC", "60"))
 
 
 settings = Settings()

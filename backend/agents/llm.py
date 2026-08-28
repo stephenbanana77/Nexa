@@ -1,5 +1,5 @@
 """LLM client with OpenAI Compatible API."""
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from utils.config import settings
 
@@ -33,3 +33,31 @@ def chat(messages: list[dict], model: str | None = None) -> str:
         timeout=settings.LLM_TIMEOUT,
     )
     return response.choices[0].message.content or ""
+
+
+async def achat(messages: list[dict], model: str | None = None) -> str:
+    """Call the provider asynchronously so deadlines and cancellation are effective."""
+    model = model or settings.LLM_MODEL
+    client = AsyncOpenAI(
+        api_key=settings.LLM_API_KEY,
+        base_url=settings.LLM_BASE_URL,
+    )
+    if not any(m.get("role") == "system" for m in messages):
+        messages = [{
+            "role": "system",
+            "content": (
+                "你是一个数据分析助手。请始终用中文回答用户的问题，"
+                "包括分析结果、SQL 注释、图表标题等全部使用中文。"
+            ),
+        }] + list(messages)
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=settings.LLM_TEMPERATURE,
+            max_tokens=settings.LLM_MAX_TOKENS,
+            timeout=settings.LLM_TIMEOUT,
+        )
+        return response.choices[0].message.content or ""
+    finally:
+        await client.close()

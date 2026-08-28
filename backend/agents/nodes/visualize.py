@@ -1,11 +1,11 @@
 import json
 import re
 from agents.state import AgentState
-from agents.llm import chat
+from agents.llm import achat
 from agents.tools import suggest_chart
 
 
-def visualize(state: AgentState) -> dict:
+async def visualize(state: AgentState) -> dict:
     sql = state["sql"]
     result = state.get("query_result", {})
 
@@ -22,7 +22,7 @@ def visualize(state: AgentState) -> dict:
 
 只返回 JSON，不要 markdown。"""
 
-        response = chat([{"role": "user", "content": prompt}])
+        response = await achat([{"role": "user", "content": prompt}])
         try:
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             chart = json.loads(json_match.group(0)) if json_match else None

@@ -52,6 +52,7 @@ def _write_env_values(updates: dict[str, str]) -> None:
         "SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "LLM_PROVIDER",
         "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
         "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL", "MOONSHOT_MODEL",
+        "LLM_TIMEOUT", "AGENT_TIMEOUT_SEC", "SKILL_TIMEOUT_SEC", "SKILL_STEP_TIMEOUT_SEC",
         "STORAGE_PATH", "MAX_UPLOAD_SIZE_MB",
     ]
     lines = ["# Nexa local environment. This file is ignored by git.", ""]

@@ -1,6 +1,7 @@
 """Context manager for injecting dataset schema into prompts."""
 from database import SessionLocal
 from models.project import Dataset
+from services.dataset_tables import dataset_table_name
 from tools import get_engine
 
 
@@ -15,7 +16,8 @@ def get_schema_context(project_id: str, dataset_id: str = None) -> str:
         if not dataset or not dataset.schema_info:
             return "No dataset loaded."
 
-        schema_lines = [f"Table 'data' ({dataset.row_count} rows, {dataset.column_count} columns)"]
+        table_name = dataset_table_name(dataset.id) if dataset_id else "data"
+        schema_lines = [f"Table '{table_name}' ({dataset.row_count} rows, {dataset.column_count} columns)"]
         schema_lines.append("")
         for col in dataset.schema_info:
             missing = f" ({col['missing_pct']}% missing)" if col["missing_pct"] > 0 else ""

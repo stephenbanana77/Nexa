@@ -27,7 +27,7 @@ The project is intentionally scoped around one hard problem:
 These commands were last run locally:
 
 ```text
-backend pytest: 80 passed
+backend pytest: 84 passed
 frontend lint: passed
 frontend build: passed
 ```
@@ -102,7 +102,7 @@ flowchart LR
 | Demo Mode | Working | One-click Superstore project with dataset, semantic layer, and first report |
 | Offline evaluation | Working | 12 Superstore cases, expandable to 30-50 |
 | Workflow engine | Working MVP | Save/edit/rerun analysis pipelines; still intentionally simple |
-| Skill system | Working MVP | Built-in manifest-based skills |
+| Skill system | Working MVP | Built-in manifest-based skills with local routing, dataset binding, step deadlines, cancellation, and failure state tracking |
 | Frontend performance | Improved | Route/tab lazy loading and vendor chunk splitting |
 | CI | Working | GitHub Actions runs backend tests, frontend lint, frontend build |
 
@@ -226,7 +226,7 @@ Nexa/
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
 - Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, Auto Investigation workflow, Hypothesis Engine, Decision Brief, Analysis Graph, and Metric Contract Check, turning uploaded datasets into reusable business metrics, executive-ready briefs, testable Data Detective cards, traceable analysis graphs, answerability gates, one-click follow-ups, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
-- Hardened engineering baseline with 75 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
+- Hardened engineering baseline with 84 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 
 ## Honest Boundaries
 
@@ -239,6 +239,7 @@ Nexa is still a portfolio-grade project, not an enterprise BI platform.
 - Workflow execution is an MVP and does not yet support branching, scheduling, or durable resumability.
 - Python notebook execution still needs sandboxing before being treated as production-safe.
 - The SQL policy records high-risk patterns like `SELECT *` and joins without conditions, but only blocks clearly unsafe operations today.
+- Agent and Skill deadlines are configurable through `LLM_TIMEOUT`, `AGENT_TIMEOUT_SEC`, `SKILL_TIMEOUT_SEC`, and `SKILL_STEP_TIMEOUT_SEC`; provider latency can still affect end-to-end response time.
 
 ## Next Roadmap
 

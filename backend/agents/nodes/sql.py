@@ -1,6 +1,6 @@
 import re
 from agents.state import AgentState
-from agents.llm import chat
+from agents.llm import achat
 from agents.prompts import SQL_GENERATION_PROMPT
 import logging
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 from agents.tools import execute_query
 
 
-def generate_sql(state: AgentState) -> dict:
+async def generate_sql(state: AgentState) -> dict:
     schema = state["schema"]
     question = state["question"]
     plan = state.get("plan", [state["question"]])
@@ -35,7 +35,7 @@ def generate_sql(state: AgentState) -> dict:
         question=f"{current_task}\n(Original question: {question}){history_ctx}{error_ctx}",
     )
 
-    response = chat([{"role": "user", "content": prompt}])
+    response = await achat([{"role": "user", "content": prompt}])
     sql_match = re.search(r"```sql\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     sql = sql_match.group(1).strip() if sql_match else response.strip()
 
