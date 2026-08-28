@@ -27,6 +27,12 @@ def _is_technical_field(name: str) -> bool:
     return bool(tokens.intersection({"id", "code", "key", "index", "row", "zip", "postal"}))
 
 
+def _is_temporal_field(name: str) -> bool:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    tokens = set(normalized.split("_"))
+    return bool(tokens.intersection({"date", "time", "timestamp", "month", "quarter", "year"}))
+
+
 def _business_numeric_columns(schema: list[dict]) -> list[dict]:
     numeric = [c for c in schema if _is_numeric(str(c.get("type", "")))]
     usable = [c for c in numeric if not _is_technical_field(str(c.get("name", "")))]
@@ -40,7 +46,20 @@ def _business_numeric_columns(schema: list[dict]) -> list[dict]:
 
 def _business_dimensions(schema: list[dict]) -> list[dict]:
     dimensions = [c for c in schema if not _is_numeric(str(c.get("type", "")))]
-    return sorted(dimensions, key=lambda c: 1 if _is_technical_field(str(c.get("name", ""))) else 0)
+    priority = ("region", "segment", "category", "sub-category", "sub_category", "ship mode", "country", "state", "city")
+
+    def sort_key(column: dict) -> tuple[int, int, int, str]:
+        name = str(column.get("name", ""))
+        lowered = name.lower()
+        priority_rank = next((i for i, token in enumerate(priority) if token in lowered), len(priority))
+        return (
+            1 if _is_temporal_field(name) else 0,
+            1 if _is_technical_field(name) else 0,
+            priority_rank,
+            lowered,
+        )
+
+    return sorted(dimensions, key=sort_key)
 
 
 def _schema(dataset: Dataset) -> list[dict]:

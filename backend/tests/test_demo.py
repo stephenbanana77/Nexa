@@ -33,3 +33,6 @@ def test_superstore_demo_report_contains_investigation_artifacts(client, auth_he
     metric_names = {metric["name"] for metric in report["semantic_snapshot"]["metrics"]}
     assert "Total Row ID" not in metric_names
     assert "Total Postal Code" not in metric_names
+    block_titles = {block["title"] for block in report["content"]["blocks"]}
+    assert "Top Region by Sales" in block_titles
+    assert "Top Order Date by Sales" not in block_titles

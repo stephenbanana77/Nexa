@@ -188,7 +188,15 @@ export default function ChatPage({ projectId }: { projectId: string }) {
               } else if (eventName === "error") {
                 streamFailed = true;
                 setShowProgress(false);
-                message.error(data.message || "Analysis failed");
+                const detail = data.message;
+                const errorText = typeof detail === "string"
+                  ? detail
+                  : Array.isArray(detail)
+                    ? detail.map((item) => typeof item === "string" ? item : item?.msg || JSON.stringify(item)).join("; ")
+                    : detail && typeof detail === "object"
+                      ? JSON.stringify(detail)
+                      : "Analysis failed";
+                message.error(errorText);
               }
             } catch {}
           }

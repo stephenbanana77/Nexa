@@ -68,10 +68,18 @@ class DuckDBEngine(DataSourceEngine):
         self._table_row_counts: dict[str, int] = {}
         self._query_lock = threading.Lock()
 
+    def _drop_relation(self, safe_name: str) -> None:
+        """Drop a table or view without assuming which relation type exists."""
+        for statement in (f"DROP TABLE IF EXISTS {safe_name}", f"DROP VIEW IF EXISTS {safe_name}"):
+            try:
+                self.conn.execute(statement)
+                return
+            except duckdb.CatalogException:
+                continue
+
     def register_csv(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
-        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
-        self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
+        self._drop_relation(safe_name)
         # Use DuckDB's native CSV reader — avoids double memory with pandas
         try:
             self.conn.execute(
@@ -95,8 +103,7 @@ class DuckDBEngine(DataSourceEngine):
     def register_excel(self, file_path: str, table_name: str = "data") -> None:
         safe_name = table_name.replace("-", "_").replace(" ", "_")
         df = pd.read_excel(file_path)
-        self.conn.execute(f"DROP TABLE IF EXISTS {safe_name}")
-        self.conn.execute(f"DROP VIEW IF EXISTS {safe_name}")
+        self._drop_relation(safe_name)
         self.conn.execute(f"CREATE OR REPLACE TABLE {safe_name} AS SELECT * FROM df")
         self._tables.add(safe_name)
         self._table_row_counts[safe_name] = len(df)
