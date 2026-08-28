@@ -154,3 +154,38 @@ def test_notebook_cells_require_project_ownership(client, project_id, auth_heade
 def test_readiness_probe_works_with_sqlalchemy_2(client):
     response = client.get("/api/health/ready")
     assert response.status_code == 200, response.text
+
+
+def test_quality_and_report_publication_gates(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+
+    quality = client.get(f"/api/datasets/by-id/{dataset_id}/quality", headers=auth_headers)
+    assert quality.status_code == 200, quality.text
+    assert quality.json()["status"] == "pass"
+    assert quality.json()["row_count"] == 3
+
+    report = client.post(
+        "/api/reports",
+        json={"project_id": project_id, "dataset_id": dataset_id},
+        headers=auth_headers,
+    ).json()
+    assert report["status"] == "draft"
+
+    blocked = client.post(f"/api/reports/{report['id']}/publish", headers=auth_headers)
+    assert blocked.status_code == 400
+    assert "Approve at least one metric" in blocked.json()["detail"]
+
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    metric_id = next(metric["id"] for metric in layer["metrics"] if metric["dataset_id"] == dataset_id)
+    approved = client.patch(
+        f"/api/semantic/metrics/{metric_id}/status",
+        json={"status": "approved"},
+        headers=auth_headers,
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    published = client.post(f"/api/reports/{report['id']}/publish", headers=auth_headers)
+    assert published.status_code == 200, published.text
+    assert published.json()["status"] == "published"
+    assert published.json()["published_at"]

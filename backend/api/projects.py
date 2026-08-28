@@ -411,6 +411,26 @@ def preview_dataset(
     return engine.preview(limit=limit)
 
 
+@router.get("/datasets/by-id/{dataset_id}/quality")
+def dataset_quality(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Run fresh quality checks before an analysis or report publication."""
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    project = db.query(Project).filter(
+        Project.id == dataset.project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    from services.data_quality import check_dataset_quality
+    return check_dataset_quality(project.id, dataset)
+
+
 @router.post("/datasets/by-id/{dataset_id}/query")
 def query_dataset(
     dataset_id: str,

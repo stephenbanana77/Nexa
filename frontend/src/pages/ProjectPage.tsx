@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { Tabs, Upload, Button, Table, Select, message, Spin, Modal } from "antd";
-import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined } from "@ant-design/icons";
+import { Tabs, Upload, Button, Table, Select, Tag, message, Spin, Modal } from "antd";
+import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -65,6 +65,8 @@ export default function ProjectPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [mysqlModalOpen, setMysqlModalOpen] = useState(false);
+  const [qualityLoading, setQualityLoading] = useState(false);
+  const [qualityData, setQualityData] = useState<any>(null);
 
   useEffect(() => {
     api.get(`/api/projects/${projectId}`).then(({ data }) => setProject(data)).catch(() => navigate("/"));
@@ -122,6 +124,18 @@ export default function ProjectPage() {
       setPreviewData(data);
     } catch {
       message.error("Failed to load preview");
+    }
+  };
+
+  const runQualityCheck = async (datasetId: string) => {
+    setQualityLoading(true);
+    try {
+      const { data } = await api.get(`/api/datasets/by-id/${datasetId}/quality`);
+      setQualityData(data);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || "Quality check failed");
+    } finally {
+      setQualityLoading(false);
     }
   };
 
@@ -183,6 +197,7 @@ export default function ProjectPage() {
                   <Button icon={<UploadOutlined />} loading={uploading} size="large">Upload CSV / Excel</Button>
                 </Upload>
                 <Button icon={<DatabaseOutlined />} size="large" onClick={() => setMysqlModalOpen(true)}>Connect MySQL</Button>
+                {selectedDatasetId && <Button icon={<SafetyCertificateOutlined />} loading={qualityLoading} onClick={() => runQualityCheck(selectedDatasetId)}>Check Data Quality</Button>}
               </div>
               {datasets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -192,6 +207,7 @@ export default function ProjectPage() {
                     onChange={(val) => {
                       setSelectedDatasetId(val);
                       setPreviewData(null);
+                      setQualityData(null);
                     }}
                     style={{ minWidth: 240, width: "100%" }}
                     options={datasets.map((d) => ({ label: d.name, value: d.id }))}
@@ -210,6 +226,20 @@ export default function ProjectPage() {
                   <div style={{ color: "#aaa", fontSize: 16, marginBottom: 8 }}>Schema</div>
                   <Table columns={schemaColumns} dataSource={selectedDataset.schema_info.map((s, i) => ({ ...s, key: i }))} pagination={false} size="small" />
                 </>}
+                {qualityData && qualityData.status && (
+                  <div style={{ marginTop: 20, background: "#1f1f1f", borderRadius: 8, padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ color: "#aaa", fontSize: 16 }}>Data Quality Gate</span>
+                      <Tag color={qualityData.status === "pass" ? "green" : qualityData.status === "warn" ? "gold" : "red"}>{qualityData.status}</Tag>
+                    </div>
+                    <div style={{ color: "#888", marginBottom: 10 }}>{qualityData.summary}</div>
+                    {(qualityData.issues || []).map((issue: any, index: number) => (
+                      <div key={`${issue.name}-${index}`} style={{ color: issue.severity === "error" ? "#ef4444" : "#f59e0b", marginTop: 4 }}>
+                        {issue.column ? `${issue.column}: ` : ""}{issue.details}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {previewData && <>
                   <div style={{ color: "#aaa", fontSize: 16, margin: "20px 0 8px" }}>Preview (first 1,000 of {selectedDataset.row_count.toLocaleString()} rows)</div>
                   <div className="ag-theme-alpine-dark" style={{ height: 400, width: "100%", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>

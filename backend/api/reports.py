@@ -1,4 +1,6 @@
 """Insight Report API."""
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -86,6 +88,61 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     _assert_project(db, report.project_id, current_user.id)
+    return serialize_report(report)
+
+
+@router.post("/{report_id}/publish")
+def publish_report(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Publish a report only after quality and metric approval gates pass."""
+    from models.project import SemanticMetric
+    from services.data_quality import check_dataset_quality
+
+    report = db.query(AnalysisReport).filter(AnalysisReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    _assert_project(db, report.project_id, current_user.id)
+    if report.status == "published":
+        return serialize_report(report)
+    if not report.dataset_id:
+        raise HTTPException(status_code=400, detail="Report has no dataset to validate")
+    dataset = db.query(Dataset).filter(
+        Dataset.id == report.dataset_id,
+        Dataset.project_id == report.project_id,
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=400, detail="Report dataset not found")
+
+    quality = check_dataset_quality(report.project_id, dataset)
+    if quality["status"] == "fail":
+        raise HTTPException(status_code=400, detail={"message": "Fix blocking data quality issues before publishing.", "quality": quality})
+
+    approved_metric = db.query(SemanticMetric).filter(
+        SemanticMetric.project_id == report.project_id,
+        SemanticMetric.status == "approved",
+        (SemanticMetric.dataset_id == report.dataset_id) | (SemanticMetric.dataset_id.is_(None)),
+    ).first()
+    if not approved_metric:
+        raise HTTPException(status_code=400, detail="Approve at least one metric before publishing this report")
+
+    now = datetime.now(UTC)
+    report.status = "published"
+    report.published_at = now
+    report.published_by = current_user.id
+    content = dict(report.content or {})
+    content["publication"] = {
+        "status": "published",
+        "published_at": now.isoformat(),
+        "published_by": current_user.id,
+        "quality_status": quality["status"],
+        "approved_metric": approved_metric.name,
+    }
+    report.content = content
+    db.commit()
+    db.refresh(report)
     return serialize_report(report)
 
 

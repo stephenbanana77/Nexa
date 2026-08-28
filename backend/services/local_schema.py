@@ -33,6 +33,9 @@ def ensure_sqlite_dev_schema(engine: Engine) -> None:
                     expression TEXT NOT NULL,
                     description TEXT NOT NULL,
                     format VARCHAR(50) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    approved_at DATETIME,
+                    approved_by VARCHAR(32),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects (id),
                     FOREIGN KEY(dataset_id) REFERENCES datasets (id)
@@ -48,6 +51,9 @@ def ensure_sqlite_dev_schema(engine: Engine) -> None:
                     name VARCHAR(255) NOT NULL,
                     "column" VARCHAR(255) NOT NULL,
                     description TEXT NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    approved_at DATETIME,
+                    approved_by VARCHAR(32),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects (id),
                     FOREIGN KEY(dataset_id) REFERENCES datasets (id)
@@ -64,8 +70,29 @@ def ensure_sqlite_dev_schema(engine: Engine) -> None:
                     content JSON NOT NULL,
                     semantic_snapshot JSON,
                     memory JSON,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    published_at DATETIME,
+                    published_by VARCHAR(32),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects (id),
                     FOREIGN KEY(dataset_id) REFERENCES datasets (id)
                 )
             """))
+        else:
+            report_columns = {col["name"] for col in inspector.get_columns("analysis_reports")}
+            if "status" not in report_columns:
+                conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'"))
+            if "published_at" not in report_columns:
+                conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN published_at DATETIME"))
+            if "published_by" not in report_columns:
+                conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN published_by VARCHAR(32)"))
+
+        for table in ("semantic_metrics", "semantic_dimensions"):
+            if table in tables:
+                columns = {col["name"] for col in inspector.get_columns(table)}
+                if "status" not in columns:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'"))
+                if "approved_at" not in columns:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN approved_at DATETIME"))
+                if "approved_by" not in columns:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN approved_by VARCHAR(32)"))

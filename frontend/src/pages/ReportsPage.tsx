@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, Collapse, Empty, List, Select, Space, Spin, Statistic, Table, Tag, Typography, message } from "antd";
-import { FileSearchOutlined, FileTextOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, FileSearchOutlined, FileTextOutlined, QuestionCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
 import type { AnalysisReport, Dataset } from "../types";
@@ -27,6 +27,7 @@ export default function ReportsPage({ projectId }: Props) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [investigating, setInvestigating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +74,23 @@ export default function ReportsPage({ projectId }: Props) {
   const askFollowUp = (question: string) => {
     const params = new URLSearchParams({ tab: "chat", question });
     navigate(`/project/${projectId}?${params.toString()}`);
+  };
+
+  const publishReport = async () => {
+    if (!selectedReport) return;
+    setPublishing(true);
+    try {
+      const { data } = await api.post(`/api/reports/${selectedReport.id}/publish`);
+      setReports((prev) => prev.map((report) => report.id === data.id ? data : report));
+      setSelectedReport(data);
+      message.success("Report published");
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      const errorText = typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : "Report publication failed";
+      message.error(errorText);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const sections = selectedReport?.content.sections;
@@ -132,7 +150,11 @@ export default function ReportsPage({ projectId }: Props) {
         ) : (
           <Space direction="vertical" size={20} style={{ width: "100%" }}>
             <div>
-              <Typography.Title level={3} style={{ marginTop: 0 }}>{selectedReport.title}</Typography.Title>
+              <Space align="center" wrap>
+                <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 0 }}>{selectedReport.title}</Typography.Title>
+                <Tag color={selectedReport.status === "published" ? "green" : "gold"}>{selectedReport.status || "draft"}</Tag>
+                {selectedReport.status !== "published" && <Button type="primary" icon={<CheckCircleOutlined />} loading={publishing} onClick={publishReport}>Publish Report</Button>}
+              </Space>
               <Space wrap>
                 <Tag color="blue">{selectedReport.content.blocks.length} evidence blocks</Tag>
                 <Tag color="orange">{investigationCards.length} investigation cards</Tag>

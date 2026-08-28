@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, Empty, Form, Input, Modal, Select, Space, Table, Tag, message } from "antd";
-import { DeleteOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CheckOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import api from "../api/client";
 import type { Dataset, SemanticDimension, SemanticLayer, SemanticMetric } from "../types";
 
@@ -70,6 +70,13 @@ export default function SemanticLayerPage({ projectId }: Props) {
     load();
   };
 
+  const updateStatus = async (type: "metrics" | "dimensions", id: string, current?: string) => {
+    const nextStatus = current === "approved" ? "draft" : "approved";
+    await api.patch(`/api/semantic/${type}/${id}/status`, { status: nextStatus });
+    message.success(nextStatus === "approved" ? "Definition approved" : "Approval revoked");
+    load();
+  };
+
   return (
     <div style={{ padding: "12px 0" }}>
       <Card
@@ -98,7 +105,8 @@ export default function SemanticLayerPage({ projectId }: Props) {
                 { title: "Name", dataIndex: "name" },
                 { title: "Expression", dataIndex: "expression", render: (v) => <Tag color="blue">{v}</Tag> },
                 { title: "Description", dataIndex: "description" },
-                { title: "", render: (_, row) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => deleteMetric(row.id)} /> },
+                { title: "Status", dataIndex: "status", render: (value: string) => <Tag color={value === "approved" ? "green" : value === "rejected" ? "red" : "gold"}>{value || "draft"}</Tag> },
+                { title: "Actions", render: (_, row) => <Space><Button size="small" type={row.status === "approved" ? "default" : "primary"} icon={<CheckOutlined />} onClick={() => updateStatus("metrics", row.id, row.status)}>{row.status === "approved" ? "Revoke" : "Approve"}</Button><Button danger size="small" icon={<DeleteOutlined />} onClick={() => deleteMetric(row.id)} /></Space> },
               ]}
             />
             <Table<SemanticDimension>
@@ -110,7 +118,8 @@ export default function SemanticLayerPage({ projectId }: Props) {
                 { title: "Name", dataIndex: "name" },
                 { title: "Column", dataIndex: "column", render: (v) => <Tag>{v}</Tag> },
                 { title: "Description", dataIndex: "description" },
-                { title: "", render: (_, row) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => deleteDimension(row.id)} /> },
+                { title: "Status", dataIndex: "status", render: (value: string) => <Tag color={value === "approved" ? "green" : value === "rejected" ? "red" : "gold"}>{value || "draft"}</Tag> },
+                { title: "Actions", render: (_, row) => <Space><Button size="small" type={row.status === "approved" ? "default" : "primary"} icon={<CheckOutlined />} onClick={() => updateStatus("dimensions", row.id, row.status)}>{row.status === "approved" ? "Revoke" : "Approve"}</Button><Button danger size="small" icon={<DeleteOutlined />} onClick={() => deleteDimension(row.id)} /></Space> },
               ]}
             />
           </Space>

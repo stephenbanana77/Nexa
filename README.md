@@ -27,7 +27,7 @@ The project is intentionally scoped around one hard problem:
 These commands were last run locally:
 
 ```text
-backend pytest: 74 passed
+backend pytest: 80 passed
 frontend lint: passed
 frontend build: passed
 ```
@@ -85,10 +85,13 @@ flowchart LR
 | Natural language data analysis | Working | LangGraph pipeline: understand, plan, SQL, execute, analyze, visualize, compose |
 | CSV / Excel upload | Working | Preview before upload and DuckDB-backed querying |
 | Multi-dataset schema context | Working | Chat can receive multiple selected datasets |
+| Data quality gate | Working | Fresh row-count, missing-value, duplicate, negative-value, and schema-drift checks |
 | SQL safety policy | Working | AST-based read-only validation, single-statement enforcement, auto-limit, risk flags |
 | Run History | Working | Step timeline plus lineage evidence chain |
 | Semantic Layer | Working | Auto-seeds metrics/dimensions from schema and supports custom business definitions |
+| Metric approval workflow | Working MVP | Definitions start as drafts and can be approved before report publication |
 | Insight Reports | Working | Generates analyst-style diagnostic reports with concentration, margin, outlier, underperformer, risk, opportunity, follow-up, and SQL evidence sections |
+| Report publication gate | Working MVP | Reports remain drafts until data quality and metric approval checks pass |
 | Auto Investigation | Working | Proactively creates Data Detective cards with finding, impact, evidence, confidence, and one-click follow-up |
 | Hypothesis Engine | Working | Converts findings into testable hypotheses with validation plans, assessments, evidence links, and follow-up actions |
 | Decision Brief | Working | Turns investigations into executive-ready situation, diagnosis, evidence, risk, recommendation, action, and next-metric summaries |
@@ -202,12 +205,15 @@ Nexa/
 1. Start backend and frontend.
 2. Click `Try Superstore Demo` on the home page.
 3. Open Semantic Layer and review the auto-seeded metrics/dimensions.
-4. Open Reports and click `Start Auto Investigation` to inspect the Decision Brief, Metric Contract Check, Analysis Graph, Data Detective cards, Hypothesis Engine, confidence, SQL evidence, and validation plans.
-5. Configure DeepSeek or Kimi in Settings if you want live Chat.
-6. Ask: `What is total sales by region?`
-7. Open Run History and expand the latest run.
-8. Show the evidence chain: schema hash, SQL attempts, policy decision, final SQL, sample rows, answer summary.
-9. Run the offline evaluation harness to show objective metrics.
+4. Open Data and click `Check Data Quality`; resolve blocking issues before sharing conclusions.
+5. Open Semantic Layer and approve the metrics/dimensions that match your business definitions.
+6. Open Reports, click `Start Auto Investigation`, and review the Decision Brief, Metric Contract Check, Analysis Graph, Data Detective cards, Hypothesis Engine, confidence, SQL evidence, and validation plans.
+7. Publish the reviewed report using `Publish Report`.
+8. Configure DeepSeek or Kimi in Settings if you want live Chat.
+9. Ask: `What is total sales by region?`
+10. Open Run History and expand the latest run.
+11. Show the evidence chain: schema hash, SQL attempts, policy decision, final SQL, sample rows, answer summary.
+12. Run the offline evaluation harness to show objective metrics.
 
 ## Resume Bullets
 

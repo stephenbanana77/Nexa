@@ -43,6 +43,8 @@ def list_semantic_layer(
             "expression": item.expression,
             "description": item.description,
             "format": item.format,
+            "status": item.status,
+            "approved_at": item.approved_at.isoformat() if item.approved_at else None,
             "created_at": item.created_at.isoformat() if item.created_at else None,
         }
         for item in metric_query.order_by(SemanticMetric.created_at.desc()).all()
@@ -54,6 +56,8 @@ def list_semantic_layer(
             "name": item.name,
             "column": item.column,
             "description": item.description,
+            "status": item.status,
+            "approved_at": item.approved_at.isoformat() if item.approved_at else None,
             "created_at": item.created_at.isoformat() if item.created_at else None,
         }
         for item in dimension_query.order_by(SemanticDimension.created_at.desc()).all()

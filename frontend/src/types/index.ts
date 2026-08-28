@@ -119,6 +119,8 @@ export interface SemanticMetric {
   expression: string;
   description?: string;
   format?: string;
+  status?: "draft" | "approved" | "rejected" | string;
+  approved_at?: string | null;
   created_at?: string;
 }
 
@@ -128,6 +130,8 @@ export interface SemanticDimension {
   name: string;
   column: string;
   description?: string;
+  status?: "draft" | "approved" | "rejected" | string;
+  approved_at?: string | null;
   created_at?: string;
 }
 
@@ -266,6 +270,9 @@ export interface AnalysisReport {
     blocks: AnalysisReportBlock[];
     markdown: string;
   };
+  status?: "draft" | "published" | string;
+  published_at?: string | null;
+  published_by?: string | null;
   created_at: string;
 }
 

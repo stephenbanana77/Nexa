@@ -992,6 +992,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         content=content,
         semantic_snapshot=semantic,
         memory=memory,
+        status="draft",
     )
     db.add(report)
     db.commit()
@@ -1008,5 +1009,8 @@ def serialize_report(report: AnalysisReport) -> dict:
         "content": report.content,
         "semantic_snapshot": report.semantic_snapshot,
         "memory": report.memory,
+        "status": report.status,
+        "published_at": report.published_at.isoformat() if report.published_at else None,
+        "published_by": report.published_by,
         "created_at": report.created_at.isoformat() if report.created_at else None,
     }
