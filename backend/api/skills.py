@@ -1,15 +1,18 @@
 """Skill API routes — browse, install, and execute skills."""
+import asyncio
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from database import get_db
 from database.session import SessionLocal
 from models.user import User
+from models.project import Dataset, Project
 from models.skill import Skill, SkillExecution
 from services.auth import get_current_user
 from skills import skill_registry
+from utils.config import settings
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -77,7 +80,24 @@ def _validate_manifest(definition: dict) -> tuple[bool, str, dict]:
 
 class SkillExecuteRequest(BaseModel):
     project_id: str
-    params: dict = {}
+    dataset_id: str | None = None
+    params: dict = Field(default_factory=dict)
+
+
+def _assert_project_and_dataset(db: Session, project_id: str, dataset_id: str | None, user_id: str) -> None:
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == user_id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if dataset_id:
+        dataset = db.query(Dataset).filter(
+            Dataset.id == dataset_id,
+            Dataset.project_id == project_id,
+        ).first()
+        if not dataset:
+            raise HTTPException(status_code=404, detail="Dataset not found")
 
 
 @router.get("")
@@ -185,28 +205,56 @@ async def execute_skill(
     skill_id: str,
     req: SkillExecuteRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     skill = skill_registry.get(skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
+    effective_dataset_id = req.dataset_id or (req.params or {}).get("dataset_id")
+    _assert_project_and_dataset(db, req.project_id, effective_dataset_id, current_user.id)
+    allowed, reason = skill_registry.check_permissions(skill_id, {
+        "available_resources": ["schema", "data"],
+        "allowed_writes": ["insight", "chart"],
+        "network_allowed": False,
+        "llm_available": True,
+    })
+    if not allowed:
+        raise HTTPException(status_code=403, detail=reason)
 
     # Import here to avoid circular dependency
     from skills.executor import execute_skill as run_skill
 
-    execution_id = skill_registry.create_execution(
-        skill.get("id", skill_id), req.project_id, req.params
-    )
+    params = dict(req.params or {})
+    if effective_dataset_id:
+        params["dataset_id"] = effective_dataset_id
+    execution_id = skill_registry.create_execution(skill.get("id", skill_id), req.project_id, params)
 
     from sse_starlette.sse import EventSourceResponse
 
     async def event_stream():
+        failed = False
         try:
-            async for event in run_skill(skill, req.project_id, req.params):
-                import json
-                yield {"event": event.get("event", "step"), "data": json.dumps(event, default=str)}
-            skill_registry.update_execution(execution_id, "done", {"result": "success"})
+            async with asyncio.timeout(settings.SKILL_TIMEOUT_SEC):
+                async for event in run_skill(skill, req.project_id, params):
+                    import json
+                    if event.get("event") in {"step_error", "skill_failed"}:
+                        failed = True
+                    yield {"event": event.get("event", "step"), "data": json.dumps(event, default=str)}
+            if failed:
+                skill_registry.update_execution(execution_id, "failed", {"error": "Skill step failed"})
+            else:
+                skill_registry.update_execution(execution_id, "done", {"result": "success"})
+        except asyncio.CancelledError:
+            skill_registry.update_execution(execution_id, "failed", {"error": "Skill execution cancelled"})
+            raise
+        except asyncio.TimeoutError:
+            message = f"Skill exceeded the {settings.SKILL_TIMEOUT_SEC}s deadline"
+            skill_registry.update_execution(execution_id, "failed", {"error": message})
+            import json
+            yield {"event": "timeout", "data": json.dumps({"event": "timeout", "message": message})}
         except Exception as e:
             skill_registry.update_execution(execution_id, "failed", {"error": str(e)})
+            import json
             yield {"event": "error", "data": json.dumps({"event": "error", "message": str(e)})}
 
     return EventSourceResponse(event_stream())
