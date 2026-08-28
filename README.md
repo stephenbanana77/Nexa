@@ -215,6 +215,10 @@ Nexa/
 11. Show the evidence chain: schema hash, SQL attempts, policy decision, final SQL, sample rows, answer summary.
 12. Run the offline evaluation harness to show objective metrics.
 
+## Development Direction
+
+后续产品与工程开发以 [Nexa 数据工作台开发蓝图](docs/Nexa数据工作台开发蓝图.md) 为基准。文档明确了目标用户、数据工作闭环、核心领域模型、Skill 与 MCP 的职责边界、V1-V3 路线和验收标准，避免围绕零散功能持续堆叠。
+
 ## Resume Bullets
 
 - Built a trustworthy AI data analysis agent with LangGraph, FastAPI, DuckDB, and React, enabling natural-language analysis over uploaded datasets with SQL-backed answers and visualizations.
