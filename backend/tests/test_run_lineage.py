@@ -52,6 +52,25 @@ def test_run_history_includes_lineage_summary(client, auth_headers, project_id):
     assert lineage["error_count"] == 0
 
 
+def test_run_rerun_requires_project_ownership(client, auth_headers, project_id):
+    tracker = RunTracker(run_type="chat", project_id=project_id)
+    run_id = tracker.start()
+    tracker.complete()
+
+    client.post(
+        "/api/auth/register",
+        json={"email": "other@nexa.io", "password": "test1234", "name": "Other"},
+    )
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "other@nexa.io", "password": "test1234"},
+    )
+    other_headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    response = client.post(f"/api/runs/{run_id}/rerun", headers=other_headers)
+    assert response.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_agent_controller_persists_analysis_lineage(monkeypatch, project_id):
     async def fake_run_agent(*args, **kwargs):

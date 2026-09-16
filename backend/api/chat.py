@@ -116,6 +116,7 @@ async def chat_stream(
     enriched_schema = "\n\n".join(part for part in context_parts if part)
     input_row_count = sum(int(ds.row_count or 0) for ds in datasets)
     input_column_count = sum(int(ds.column_count or 0) for ds in datasets)
+    effective_dataset_id = dataset_ids[0] if len(dataset_ids) == 1 else None
 
     # Conversation management: reuse or create
     conv_id = req.conversation_id
@@ -145,7 +146,7 @@ async def chat_stream(
         req.message,
         history=history,
         user_id=current_user.id,
-        dataset_id=req.dataset_id,
+        dataset_id=effective_dataset_id,
         schema_override=enriched_schema if dataset_ids else None,
         input_row_count=input_row_count,
         input_column_count=input_column_count,

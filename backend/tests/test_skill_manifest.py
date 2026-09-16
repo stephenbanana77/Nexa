@@ -100,3 +100,22 @@ def test_skill_install_non_dict_definition(client, auth_headers):
         "definition": "not a dict",
     }, headers=auth_headers)
     assert resp.status_code in (400, 422)
+
+
+def test_skill_execution_history_requires_project_ownership(
+    client, auth_headers, project_id
+):
+    client.post(
+        "/api/auth/register",
+        json={"email": "skill-other@nexa.io", "password": "test1234", "name": "Other"},
+    )
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "skill-other@nexa.io", "password": "test1234"},
+    )
+    other_headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    response = client.get(
+        f"/api/skills/executions/{project_id}", headers=other_headers
+    )
+    assert response.status_code == 404

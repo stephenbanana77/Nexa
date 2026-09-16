@@ -56,6 +56,15 @@ async def rerun(
     if not detail:
         raise HTTPException(status_code=404, detail="Run not found")
 
+    # A run id is not an authorization boundary. Verify ownership before
+    # exposing the original question or starting a new analysis.
+    project = db.query(Project).filter(
+        Project.id == detail["project_id"],
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Run not found")
+
     # Extract the original question from the first step's input_summary
     question = "Analyze the data"
     for step in detail.get("steps", []):

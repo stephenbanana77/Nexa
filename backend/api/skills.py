@@ -264,5 +264,7 @@ async def execute_skill(
 def list_executions(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    _assert_project_and_dataset(db, project_id, None, current_user.id)
     return skill_registry.get_executions(project_id)
