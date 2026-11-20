@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 from fastapi.responses import JSONResponse
 
+from database.session import SessionLocal
+from models.project import Conversation, Message
+
 
 def test_chat_single_dataset_no_crash(client, auth_headers, project_id):
     """Chat with no datasets should return error, not crash."""
@@ -80,3 +83,27 @@ def test_chat_dataset_ids_binds_single_selection_to_agent(
 
     assert response.status_code == 200
     assert captured["dataset_id"] == dataset_id
+
+
+def test_conversation_detail_restores_evidence(client, auth_headers, project_id):
+    with SessionLocal() as db:
+        conversation = Conversation(project_id=project_id, title="Historic analysis")
+        db.add(conversation)
+        db.flush()
+        db.add(Message(conversation_id=conversation.id, role="user", content="Count rows"))
+        db.add(Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content="There are three rows.",
+            metadata_={"sql": "SELECT COUNT(*) FROM data", "rows": [[3]], "columns": ["count"], "row_count": 1},
+        ))
+        db.commit()
+        conversation_id = conversation.id
+
+    response = client.get(
+        f"/api/chat/conversations/detail/{conversation_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["messages"][1]["sql"] == "SELECT COUNT(*) FROM data"
+    assert response.json()["messages"][1]["rows"] == [[3]]

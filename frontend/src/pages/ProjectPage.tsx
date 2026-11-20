@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { Tabs, Upload, Button, Table, Select, Tag, message, Spin, Modal, Dropdown } from "antd";
-import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined, SafetyCertificateOutlined, MoreOutlined } from "@ant-design/icons";
+import { Tabs, Upload, Button, Input, Table, Select, Tag, message, Spin, Modal, Dropdown, Popconfirm } from "antd";
+import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined, SafetyCertificateOutlined, MoreOutlined, DeleteOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -45,6 +45,7 @@ interface Dataset {
   schema_info: SchemaField[];
   preview?: PreviewData;
   created_at: string;
+  source_type?: string;
 }
 
 interface ProjectInfo {
@@ -67,6 +68,9 @@ export default function ProjectPage() {
   const [mysqlModalOpen, setMysqlModalOpen] = useState(false);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityData, setQualityData] = useState<any>(null);
+  const [querySql, setQuerySql] = useState("SELECT * FROM data LIMIT 100");
+  const [queryResult, setQueryResult] = useState<PreviewData | null>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
 
   useEffect(() => {
     api.get(`/api/projects/${projectId}`).then(({ data }) => setProject(data)).catch(() => navigate("/"));
@@ -136,6 +140,33 @@ export default function ProjectPage() {
       message.error(err.response?.data?.detail || "数据质量检查失败，请稍后重试");
     } finally {
       setQualityLoading(false);
+    }
+  };
+
+  const deleteDataset = async (datasetId: string) => {
+    try {
+      await api.delete(`/api/datasets/by-id/${datasetId}`);
+      const next = datasets.filter((dataset) => dataset.id !== datasetId);
+      setDatasets(next);
+      setSelectedDatasetId(next[0]?.id || null);
+      setPreviewData(null);
+      setQualityData(null);
+      message.success("数据集已删除");
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || "数据集删除失败");
+    }
+  };
+
+  const runDirectQuery = async (datasetId: string) => {
+    if (!querySql.trim()) return;
+    setQueryLoading(true);
+    try {
+      const { data } = await api.post(`/api/datasets/by-id/${datasetId}/query`, { sql: querySql });
+      setQueryResult(data);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || "SQL 查询失败");
+    } finally {
+      setQueryLoading(false);
     }
   };
 
@@ -222,6 +253,11 @@ export default function ProjectPage() {
                 </Upload>
                 <Button icon={<DatabaseOutlined />} size="large" onClick={() => setMysqlModalOpen(true)}>连接 MySQL</Button>
                 {selectedDatasetId && <Button icon={<SafetyCertificateOutlined />} loading={qualityLoading} onClick={() => runQualityCheck(selectedDatasetId)}>检查数据质量</Button>}
+                {selectedDatasetId && (
+                  <Popconfirm title="删除这个数据集？" description="原始上传文件也会删除，此操作不可撤销。" onConfirm={() => deleteDataset(selectedDatasetId)}>
+                    <Button danger icon={<DeleteOutlined />} aria-label="删除数据集" title="删除数据集" />
+                  </Popconfirm>
+                )}
               </div>
               {datasets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -232,9 +268,10 @@ export default function ProjectPage() {
                       setSelectedDatasetId(val);
                       setPreviewData(null);
                       setQualityData(null);
+                      setQueryResult(null);
                     }}
                     style={{ minWidth: 240, width: "100%" }}
-                    options={datasets.map((d) => ({ label: d.name, value: d.id }))}
+                    options={datasets.map((d) => ({ label: `${d.name}（${d.row_count.toLocaleString()} 行）`, value: d.id }))}
                   />
                 </div>
               )}
@@ -270,7 +307,31 @@ export default function ProjectPage() {
                     <AgGridReact columnDefs={gridColumns} rowData={gridRows} rowHeight={32} headerHeight={36} suppressCellFocus />
                   </div>
                 </>}
-                {!previewData && selectedDataset.schema_info && <Button onClick={() => loadPreview(selectedDataset.id)} style={{ marginTop: 12 }}>加载数据预览</Button>}
+                {!previewData && <Button onClick={() => loadPreview(selectedDataset.id)} style={{ marginTop: 12 }}>加载数据预览</Button>}
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ color: "#aaa", fontSize: 16, marginBottom: 8 }}>直接 SQL 查询</div>
+                  {selectedDataset.source_type === "mysql" && (
+                    <div style={{ color: "#f59e0b", marginBottom: 8 }}>MySQL 为会话连接，服务重启后需要重新连接；Agent、报告和自动化暂不支持该外部表。</div>
+                  )}
+                  <Input.TextArea
+                    value={querySql}
+                    onChange={(event) => setQuerySql(event.target.value)}
+                    autoSize={{ minRows: 2, maxRows: 8 }}
+                    style={{ fontFamily: "monospace" }}
+                  />
+                  <Button type="primary" loading={queryLoading} onClick={() => runDirectQuery(selectedDataset.id)} style={{ marginTop: 8 }}>运行查询</Button>
+                  {queryResult && (
+                    <Table
+                      style={{ marginTop: 12 }}
+                      size="small"
+                      scroll={{ x: "max-content" }}
+                      pagination={{ pageSize: 20 }}
+                      rowKey={(_, index) => String(index)}
+                      columns={queryResult.columns.map((column, index) => ({ title: column, dataIndex: String(index), key: `${column}-${index}` }))}
+                      dataSource={queryResult.rows.map((row) => Object.fromEntries(row.map((value, index) => [String(index), value])))}
+                    />
+                  )}
+                </div>
               </>}
             </div> },
           { key: "reports", label: <span>交付物</span>,
@@ -294,9 +355,10 @@ export default function ProjectPage() {
             id: data.id,
             name: data.name,
             row_count: data.row_count,
-            column_count: 0,
-            schema_info: [],
+            column_count: data.column_count || 0,
+            schema_info: data.schema_info || [],
             created_at: new Date().toISOString(),
+            source_type: data.source_type,
           }, ...prev]);
           setSelectedDatasetId(data.id);
         }}

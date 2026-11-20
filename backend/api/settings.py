@@ -7,7 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from database import get_db
 from models.user import User
 from services.auth import get_current_user
 from utils.config import settings
@@ -29,7 +31,16 @@ def _provider_fields(provider: str) -> tuple[str, str, str]:
         return "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL", "MOONSHOT_MODEL"
     if provider == "deepseek":
         return "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL"
-    raise HTTPException(status_code=400, detail="provider must be 'deepseek' or 'moonshot'")
+    if provider == "custom":
+        return "CUSTOM_API_KEY", "CUSTOM_BASE_URL", "CUSTOM_MODEL"
+    raise HTTPException(status_code=400, detail="provider must be 'deepseek', 'moonshot', or 'custom'")
+
+
+def _assert_settings_admin(db: Session, current_user: User) -> None:
+    """Only a local workspace administrator may mutate process-wide credentials."""
+    del db
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only the local workspace administrator can change global model settings")
 
 
 def _read_env_file() -> dict[str, str]:
@@ -52,6 +63,7 @@ def _write_env_values(updates: dict[str, str]) -> None:
         "SECRET_KEY", "DATABASE_URL", "CORS_ORIGINS", "LLM_PROVIDER",
         "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
         "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL", "MOONSHOT_MODEL",
+        "CUSTOM_API_KEY", "CUSTOM_BASE_URL", "CUSTOM_MODEL",
         "LLM_TIMEOUT", "AGENT_TIMEOUT_SEC", "SKILL_TIMEOUT_SEC", "SKILL_STEP_TIMEOUT_SEC",
         "STORAGE_PATH", "MAX_UPLOAD_SIZE_MB",
     ]
@@ -91,6 +103,11 @@ def _serialize_llm_settings() -> dict:
                 "model": settings.MOONSHOT_MODEL,
                 "has_key": _is_real_key(settings.MOONSHOT_API_KEY),
             },
+            "custom": {
+                "base_url": settings.CUSTOM_BASE_URL,
+                "model": settings.CUSTOM_MODEL,
+                "has_key": _is_real_key(settings.CUSTOM_API_KEY),
+            },
         },
     }
 
@@ -102,8 +119,12 @@ def get_llm_settings(current_user: User = Depends(get_current_user)):
 
 
 @router.put("/llm")
-def update_llm_settings(req: LLMSettingsUpdate, current_user: User = Depends(get_current_user)):
-    del current_user
+def update_llm_settings(
+    req: LLMSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _assert_settings_admin(db, current_user)
     provider = req.provider.lower()
     key_field, base_field, model_field = _provider_fields(provider)
     updates = {"LLM_PROVIDER": provider}
@@ -122,8 +143,11 @@ def update_llm_settings(req: LLMSettingsUpdate, current_user: User = Depends(get
 
 
 @router.post("/llm/test")
-def test_llm_settings(current_user: User = Depends(get_current_user)):
-    del current_user
+def test_llm_settings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _assert_settings_admin(db, current_user)
     if not _is_real_key(settings.LLM_API_KEY):
         raise HTTPException(status_code=400, detail="Current provider API key is not configured")
     try:

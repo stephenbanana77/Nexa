@@ -226,7 +226,10 @@ class EngineRegistry:
 
     def register(self, project_id: str, engine: DataSourceEngine):
         with self._lock:
+            previous = self._engines.get(project_id)
             self._engines[project_id] = engine
+        if isinstance(previous, MySQLConnector) and previous is not engine:
+            previous.close()
 
     def get(self, project_id: str) -> DataSourceEngine:
         with self._lock:
@@ -235,6 +238,10 @@ class EngineRegistry:
                 db_path = _os.path.join(_os.getenv("STORAGE_PATH", "./storage"), f"{project_id}.duckdb")
                 self._engines[project_id] = DuckDBEngine(db_path)
             return self._engines[project_id]
+
+    def has(self, key: str) -> bool:
+        with self._lock:
+            return key in self._engines
 
     def remove(self, project_id: str):
         with self._lock:

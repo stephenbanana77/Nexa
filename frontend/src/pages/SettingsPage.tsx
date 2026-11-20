@@ -4,13 +4,14 @@ import { ApiOutlined, SaveOutlined } from "@ant-design/icons";
 import api from "../api/client";
 
 interface LLMSettings {
-  provider: "deepseek" | "moonshot";
+  provider: "deepseek" | "moonshot" | "custom";
   base_url: string;
   model: string;
   has_key: boolean;
   providers: {
     deepseek: { base_url: string; model: string; has_key: boolean };
     moonshot: { base_url: string; model: string; has_key: boolean };
+    custom: { base_url: string; model: string; has_key: boolean };
   };
 }
 
@@ -39,7 +40,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!settings || !provider) return;
-    const selected = settings.providers[provider as "deepseek" | "moonshot"];
+    const selected = settings.providers[provider as "deepseek" | "moonshot" | "custom"];
     form.setFieldsValue({ base_url: selected.base_url, model: selected.model, api_key: "" });
   }, [provider, settings, form]);
 
@@ -70,7 +71,7 @@ export default function SettingsPage() {
     }
   };
 
-  const providerStatus = settings?.providers?.[provider as "deepseek" | "moonshot"];
+  const providerStatus = settings?.providers?.[provider as "deepseek" | "moonshot" | "custom"];
 
   return (
     <div style={{ padding: "12px 0", maxWidth: 760 }}>
@@ -78,7 +79,7 @@ export default function SettingsPage() {
         <Alert
           type="info"
           showIcon
-          message="API Key 会写入本地 .env，保存后不会再返回浏览器。"
+          message="这是本机全局设置，仅首位注册的工作区管理员可修改。API Key 写入本地 .env，保存后不会返回浏览器。"
           style={{ marginBottom: 20 }}
         />
         <Form form={form} layout="vertical">
@@ -87,6 +88,7 @@ export default function SettingsPage() {
               options={[
                 { label: "DeepSeek", value: "deepseek" },
                 { label: "Kimi / Moonshot", value: "moonshot" },
+                { label: "OpenAI 兼容服务 / 中转站", value: "custom" },
               ]}
             />
           </Form.Item>
@@ -100,7 +102,7 @@ export default function SettingsPage() {
             <Input />
           </Form.Item>
           <Form.Item name="model" label="模型" rules={[{ required: true }]}>
-            <Input placeholder="deepseek-chat or kimi-k3" />
+            <Input placeholder="例如 deepseek-chat、kimi-k3 或中转站模型名" />
           </Form.Item>
           <Form.Item name="api_key" label="API Key">
             <Input.Password placeholder="留空则保留已有 Key" />

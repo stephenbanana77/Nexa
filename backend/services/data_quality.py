@@ -4,7 +4,9 @@ from __future__ import annotations
 from typing import Any
 
 from models.project import Dataset
+from services.dataset_tables import dataset_engine_key, dataset_table_name
 from tools import get_engine, load_dataset
+from tools.query_engine import engine_registry
 
 
 def _quote(identifier: str) -> str:
@@ -30,14 +32,25 @@ def _normalize_type(dtype: str) -> str:
 
 def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
     """Return a fresh, explainable quality snapshot for a dataset."""
+    table_name = dataset.file_path if dataset.source_type == "mysql" else dataset_table_name(dataset.id)
+    engine_key = dataset_engine_key(project_id, dataset.id, dataset.source_type)
+    if dataset.source_type == "mysql" and not engine_registry.has(engine_key):
+        return {
+            "status": "fail",
+            "summary": "The MySQL session has expired. Reconnect before running quality checks.",
+            "checks": [{"name": "connection", "status": "fail", "details": "Session-only MySQL connection is unavailable."}],
+            "issues": [{"severity": "error", "name": "connection", "details": "Reconnect the MySQL table."}],
+            "row_count": dataset.row_count,
+            "column_count": dataset.column_count,
+        }
     if dataset.source_type in ("csv", "xlsx", "xls", ".csv", ".xlsx", ".xls"):
-        load_dataset(project_id, dataset.file_path, dataset.source_type)
-    engine = get_engine(project_id)
+        load_dataset(project_id, dataset.file_path, dataset.source_type, table_name=table_name)
+    engine = get_engine(engine_key)
     checks: list[dict[str, Any]] = []
     issues: list[dict[str, Any]] = []
 
     try:
-        schema = engine.get_schema("data")
+        schema = engine.get_schema(table_name)
     except Exception:
         schema = []
     def column_value(column: Any, key: str, default: Any = "") -> Any:
@@ -60,7 +73,7 @@ def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
         }
 
     try:
-        row_count = engine.query("SELECT COUNT(*) AS row_count FROM data").rows[0][0]
+        row_count = engine.query(f"SELECT COUNT(*) AS row_count FROM {table_name}").rows[0][0]
         checks.append({"name": "row_count", "status": "pass" if row_count > 0 else "fail", "value": row_count})
         if not row_count:
             issues.append({"severity": "error", "name": "row_count", "details": "Dataset is empty."})
@@ -74,7 +87,7 @@ def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
         for name in schema_names
     )
     try:
-        missing_row = engine.query(f"SELECT {missing_expr} FROM data").rows[0] if missing_expr else []
+        missing_row = engine.query(f"SELECT {missing_expr} FROM {table_name}").rows[0] if missing_expr else []
         missing = []
         for index, name in enumerate(schema_names):
             pct = float(missing_row[index] or 0)
@@ -87,7 +100,7 @@ def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
         issues.append({"severity": "error", "name": "missing_values", "details": str(exc)})
 
     try:
-        distinct_count = engine.query("SELECT COUNT(*) FROM (SELECT DISTINCT * FROM data)").rows[0][0]
+        distinct_count = engine.query(f"SELECT COUNT(*) FROM (SELECT DISTINCT * FROM {table_name})").rows[0][0]
         duplicate_count = max(int(row_count) - int(distinct_count), 0)
         checks.append({"name": "duplicate_rows", "status": "warn" if duplicate_count else "pass", "value": duplicate_count})
         if duplicate_count:
@@ -99,7 +112,7 @@ def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
     negative_counts: dict[str, int] = {}
     for name in numeric_columns:
         try:
-            count = int(engine.query(f"SELECT COUNT(*) FROM data WHERE {_quote(name)} < 0").rows[0][0])
+            count = int(engine.query(f"SELECT COUNT(*) FROM {table_name} WHERE {_quote(name)} < 0").rows[0][0])
             negative_counts[name] = count
             if count:
                 issues.append({"severity": "warning", "name": "negative_values", "column": name, "details": f"{count} negative values"})
@@ -108,11 +121,14 @@ def check_dataset_quality(project_id: str, dataset: Dataset) -> dict[str, Any]:
     checks.append({"name": "negative_values", "status": "warn" if negative_counts and any(negative_counts.values()) else "pass", "columns": negative_counts})
 
     expected_schema = {str(item.get("name")): str(item.get("type", "")) for item in (dataset.schema_info or [])}
-    drift = [
-        {"column": name, "expected": expected_schema[name], "actual": schema_types.get(name, "missing")}
-        for name in set(expected_schema) | set(schema_types)
-        if _normalize_type(expected_schema.get(name, "")) != _normalize_type(schema_types.get(name, ""))
-    ]
+    drift = []
+    for name in set(expected_schema) | set(schema_types):
+        expected = _normalize_type(expected_schema.get(name, ""))
+        actual = _normalize_type(schema_types.get(name, ""))
+        # Older uploads recorded pandas ``object`` before DuckDB inferred dates.
+        compatible_legacy_date = expected == "text" and actual == "temporal"
+        if expected != actual and not compatible_legacy_date:
+            drift.append({"column": name, "expected": expected_schema.get(name, "missing"), "actual": schema_types.get(name, "missing")})
     checks.append({"name": "schema_drift", "status": "fail" if drift else "pass", "columns": drift})
     if drift:
         issues.append({"severity": "error", "name": "schema_drift", "details": "Dataset schema changed since ingestion.", "columns": drift})

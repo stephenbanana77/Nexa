@@ -26,10 +26,22 @@ class SkillInstallRequest(BaseModel):
     definition: dict
     version: str = "1.0.0"
 
-# ── Manifest schema (subset for validation) ──
-REQUIRED_MANIFEST_KEYS = {"name", "type", "actions"}
-ALLOWED_ACTION_TYPES = {"sql", "llm", "chart", "http", "python", "notebook", "skill"}
+# Manifest schema. ``steps`` is canonical; legacy ``actions`` is normalized.
+REQUIRED_MANIFEST_KEYS = {"name", "type"}
+ALLOWED_ACTION_TYPES = {"sql", "insight", "visualize", "http", "python", "notebook", "skill"}
 DANGEROUS_ACTION_TYPES = {"http", "python"}  # require explicit user confirmation
+
+
+def _normalize_definition(definition: dict) -> dict:
+    normalized = dict(definition)
+    if "steps" not in normalized and "actions" in normalized:
+        type_map = {"llm": "insight", "chart": "visualize"}
+        normalized["steps"] = [
+            {**action, "type": type_map.get(action.get("type"), action.get("type"))}
+            if isinstance(action, dict) else action
+            for action in normalized.get("actions", [])
+        ]
+    return normalized
 
 
 def _validate_manifest(definition: dict) -> tuple[bool, str, dict]:
@@ -40,13 +52,14 @@ def _validate_manifest(definition: dict) -> tuple[bool, str, dict]:
     if not isinstance(definition, dict):
         return False, "definition must be a JSON object", {}
 
+    definition = _normalize_definition(definition)
     missing = REQUIRED_MANIFEST_KEYS - set(definition.keys())
     if missing:
         return False, f"Missing required manifest fields: {', '.join(sorted(missing))}", {}
 
-    actions = definition.get("actions", [])
+    actions = definition.get("steps", [])
     if not isinstance(actions, list) or len(actions) == 0:
-        return False, "manifest must have at least one action", {}
+        return False, "manifest must have at least one step", {}
 
     permissions_summary = {
         "skill_name": definition.get("name", "unknown"),
@@ -60,10 +73,10 @@ def _validate_manifest(definition: dict) -> tuple[bool, str, dict]:
     seen_types = set()
     for i, action in enumerate(actions):
         if not isinstance(action, dict):
-            return False, f"Action #{i+1} must be an object", {}
+            return False, f"Step #{i+1} must be an object", {}
         atype = action.get("type", "")
         if atype not in ALLOWED_ACTION_TYPES:
-            return False, f"Action #{i+1} has unknown type '{atype}'. Allowed: {', '.join(sorted(ALLOWED_ACTION_TYPES))}", {}
+            return False, f"Step #{i+1} has unknown type '{atype}'. Allowed: {', '.join(sorted(ALLOWED_ACTION_TYPES))}", {}
         seen_types.add(atype)
         if atype in DANGEROUS_ACTION_TYPES:
             permissions_summary["dangerous_actions"].append({
@@ -98,6 +111,11 @@ def _assert_project_and_dataset(db: Session, project_id: str, dataset_id: str | 
         ).first()
         if not dataset:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        if dataset.source_type == "mysql":
+            raise HTTPException(
+                status_code=400,
+                detail="MySQL datasets currently support preview and direct SQL only; Skill execution is not connected yet",
+            )
 
 
 @router.get("")
@@ -155,13 +173,15 @@ def install_skill(
     if existing:
         raise HTTPException(status_code=400, detail="Skill already exists")
 
+    normalized_definition = _normalize_definition(req.definition)
+    normalized_definition.pop("actions", None)
     skill = Skill(
         name=req.name,
         title=req.title,
         description=req.description,
         category=req.category,
         icon=req.icon,
-        definition=req.definition,
+        definition=normalized_definition,
         version=req.version,
         is_builtin=False,
     )

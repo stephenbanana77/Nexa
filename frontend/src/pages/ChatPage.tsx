@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Input, Modal, Select, Switch, message } from "antd";
 import {
@@ -48,6 +48,12 @@ interface ProgressStage {
   status: "done" | "running" | "pending";
 }
 
+interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
 const STAGES: ProgressStage[] = [
   { name: "understanding", label: "理解业务任务", status: "pending" },
   { name: "planning", label: "制定分析计划", status: "pending" },
@@ -88,8 +94,9 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([]);
-  const [datasets, setDatasets] = useState<{ id: string; name: string; row_count?: number }[]>([]);
+  const [datasets, setDatasets] = useState<{ id: string; name: string; row_count?: number; source_type?: string }[]>([]);
   const [stages, setStages] = useState<ProgressStage[]>(STAGES);
   const [showProgress, setShowProgress] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -107,9 +114,39 @@ export default function ChatPage({ projectId }: { projectId: string }) {
       const list = data.items || data;
       const safeList = Array.isArray(list) ? list : [];
       setDatasets(safeList);
-      if (safeList.length > 0) setSelectedDatasetIds([safeList[0].id]);
+      const firstAgentDataset = safeList.find((dataset) => dataset.source_type !== "mysql");
+      if (firstAgentDataset) setSelectedDatasetIds([firstAgentDataset.id]);
     }).catch(() => {});
   }, [projectId]);
+
+  const loadConversations = useCallback(() => {
+    api.get(`/api/chat/conversations/${projectId}`)
+      .then(({ data }) => setConversations(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [projectId]);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  const openConversation = async (id: string) => {
+    try {
+      const { data } = await api.get(`/api/chat/conversations/detail/${id}`);
+      setConversationId(id);
+      setMessages((data.messages || []).map((item: ChatMessage) => ({
+        role: item.role,
+        content: item.content,
+        sql: item.sql,
+        columns: item.columns,
+        rows: item.rows,
+        row_count: item.row_count,
+      })));
+      resetStages();
+      setShowProgress(false);
+    } catch {
+      message.error("历史任务加载失败");
+    }
+  };
 
   useEffect(() => {
     const question = searchParams.get("question");
@@ -215,7 +252,10 @@ export default function ChatPage({ projectId }: { projectId: string }) {
             else if (eventName === "analyzing") advanceStage("analyzing");
             else if (eventName === "visualizing") advanceStage("visualizing");
             else if (eventName === "insight") finalData = data;
-            else if (eventName === "conversation_created") setConversationId(data.conversation_id);
+            else if (eventName === "conversation_created") {
+              setConversationId(data.conversation_id);
+              loadConversations();
+            }
             else if (eventName === "retry") credibility.sql_retries += 1;
             else if (eventName === "error" || eventName === "timeout") {
               failed = true;
@@ -329,9 +369,23 @@ export default function ChatPage({ projectId }: { projectId: string }) {
             <span className="agent-kicker">数据任务 Agent</span>
             <h2>{conversationId ? "继续完善任务" : "描述你需要的结果"}</h2>
           </div>
-          {messages.length > 0 && (
-            <Button type="text" icon={<PlusOutlined />} onClick={startNewTask}>新任务</Button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {conversations.length > 0 && (
+              <Select
+                value={conversationId}
+                onChange={openConversation}
+                placeholder="历史任务"
+                style={{ width: 220 }}
+                options={conversations.map((conversation) => ({
+                  value: conversation.id,
+                  label: conversation.title,
+                }))}
+              />
+            )}
+            {messages.length > 0 && (
+              <Button type="text" icon={<PlusOutlined />} onClick={startNewTask}>新任务</Button>
+            )}
+          </div>
         </header>
 
         <div className="agent-thread">
@@ -426,7 +480,11 @@ export default function ChatPage({ projectId }: { projectId: string }) {
               mode="multiple"
               value={selectedDatasetIds}
               onChange={setSelectedDatasetIds}
-              options={datasets.map((dataset) => ({ value: dataset.id, label: dataset.name }))}
+              options={datasets.map((dataset) => ({
+                value: dataset.id,
+                disabled: dataset.source_type === "mysql",
+                label: `${dataset.name}${dataset.row_count != null ? `（${dataset.row_count.toLocaleString()} 行）` : ""}${dataset.source_type === "mysql" ? "（仅直接 SQL）" : ""}`,
+              }))}
               maxTagCount={1}
               className="dataset-picker"
               aria-label="Agent 使用的数据集"
@@ -509,9 +567,9 @@ export default function ChatPage({ projectId }: { projectId: string }) {
               onChange={setCadence}
               options={[
                 { value: "manual", label: "按需运行" },
-                { value: "on_new_data", label: "新数据到达时" },
-                { value: "weekly", label: "每周" },
-                { value: "monthly", label: "每月" },
+                { value: "on_new_data", label: "新数据到达时（调度器未接入）", disabled: true },
+                { value: "weekly", label: "每周（调度器未接入）", disabled: true },
+                { value: "monthly", label: "每月（调度器未接入）", disabled: true },
               ]}
             />
           </label>

@@ -9,7 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 from database import get_db
 from database.session import SessionLocal
 from models.user import User
-from models.project import Project
+from models.project import Dataset, Project
 from models.workflow import Workflow, WorkflowStep
 from services.auth import get_current_user
 from services.run_tracker import RunTracker, get_run_detail
@@ -218,8 +218,52 @@ async def run_workflow(
             detail="Workflow has no steps. Configure at least one step before running.",
         )
 
-    tracker = RunTracker(run_type="workflow", project_id=wf.project_id, ref_id=workflow_id)
+    dataset_ids = list(dict.fromkeys((wf.inputs or {}).get("dataset_ids") or []))
+    datasets = []
+    if dataset_ids:
+        datasets = db.query(Dataset).filter(
+            Dataset.project_id == wf.project_id,
+            Dataset.id.in_(dataset_ids),
+        ).all()
+        datasets_by_id = {dataset.id: dataset for dataset in datasets}
+        if set(datasets_by_id) != set(dataset_ids):
+            raise HTTPException(status_code=400, detail="Workflow contains a dataset that is not available in this project")
+        datasets = [datasets_by_id[dataset_id] for dataset_id in dataset_ids]
+
+    from services.dataset_tables import bind_default_table, dataset_table_name
+    from tools import load_dataset
+
+    for dataset in datasets:
+        if dataset.source_type == "mysql":
+            raise HTTPException(
+                status_code=400,
+                detail="MySQL datasets currently support preview and direct SQL only; workflow execution is not connected yet",
+            )
+        if not dataset.file_path:
+            raise HTTPException(status_code=400, detail=f"Dataset '{dataset.name}' cannot be loaded by this workflow")
+        load_dataset(
+            wf.project_id,
+            dataset.file_path,
+            dataset.source_type,
+            table_name=dataset_table_name(dataset.id),
+        )
+
+    workflow_project_id = wf.project_id
+    workflow_user_id = current_user.id
+    primary_dataset_id = dataset_ids[0] if dataset_ids else None
+
+    tracker = RunTracker(
+        run_type="workflow",
+        project_id=workflow_project_id,
+        ref_id=workflow_id,
+        created_by=workflow_user_id,
+    )
     tracker.start()
+    tracker.update_lineage({
+        "workflow_id": workflow_id,
+        "dataset_ids": dataset_ids,
+        "dataset_tables": {dataset.id: dataset_table_name(dataset.id) for dataset in datasets},
+    })
 
     from agents.llm import chat
     from agents.tools import execute_query, suggest_chart
@@ -243,6 +287,13 @@ async def run_workflow(
     # ── Build step context from previous results ──
     def _build_context_from_sql(qr) -> dict:
         """Extract useful fields from a QueryResult into context dict."""
+        if isinstance(qr, dict):
+            return {
+                "sql": qr.get("sql", ""),
+                "row_count": qr.get("row_count", 0),
+                "columns": qr.get("columns", []),
+                "rows": qr.get("rows", [])[:5],
+            }
         return {
             "sql": getattr(qr, "sql", ""),
             "row_count": getattr(qr, "row_count", 0),
@@ -267,9 +318,18 @@ async def run_workflow(
                 if step.type == "sql":
                     raw_sql = step.config.get("sql_template", "SELECT * FROM data LIMIT 10")
                     sql = _resolve_vars(raw_sql, step_context)
-                    qr = execute_query(wf.project_id, sql)
-                    tracker.complete_step(sid, sql=sql)
+                    if primary_dataset_id:
+                        sql = bind_default_table(sql, primary_dataset_id)
+                    elif "data" in sql.lower():
+                        raise ValueError("This SQL step uses the data table but the workflow has no bound dataset")
+                    qr = execute_query(workflow_project_id, sql)
+                    tracker.complete_step(sid, sql=sql, output_summary=f"{qr.get('row_count', 0)} row(s)")
                     step_context[step_idx] = _build_context_from_sql(qr)
+                    step_context[step_idx]["sql"] = sql
+                    tracker.update_lineage({"steps": {str(step_idx): {
+                        "type": "sql", "sql": sql, "row_count": qr.get("row_count", 0),
+                        "columns": qr.get("columns", []),
+                    }}})
                     yield {
                         "event": "step_done",
                         "data": json.dumps({"event": "step_done", "type": "sql", "sql": sql, "result": qr}),
@@ -277,11 +337,59 @@ async def run_workflow(
 
                 elif step.type == "skill":
                     skill_name = step.config.get("skill_name", "")
+                    if not skill_name:
+                        raise ValueError("Skill step has no skill selected")
+                    skill_dataset_id = step.config.get("dataset_id") or primary_dataset_id
+                    if not skill_dataset_id:
+                        raise ValueError("Skill step requires a bound dataset")
+                    if skill_dataset_id not in dataset_ids:
+                        raise ValueError("Skill step dataset is not bound to this workflow")
+
+                    from skills import skill_registry
+                    from skills.executor import execute_skill as run_skill
+
+                    skill = skill_registry.get(skill_name)
+                    if not skill:
+                        raise ValueError(f"Skill '{skill_name}' not found")
+                    allowed, reason = skill_registry.check_permissions(skill_name, {
+                        "available_resources": ["schema", "data"],
+                        "allowed_writes": ["insight", "chart"],
+                        "network_allowed": False,
+                        "llm_available": True,
+                    })
+                    if not allowed:
+                        raise ValueError(reason)
+
+                    skill_events = []
+                    async for skill_event in run_skill(
+                        skill,
+                        workflow_project_id,
+                        {"dataset_id": skill_dataset_id},
+                    ):
+                        skill_events.append(skill_event)
+                        if skill_event.get("event") == "skill_failed":
+                            raise RuntimeError(skill_event.get("message") or f"Skill '{skill_name}' failed")
+                        yield {
+                            "event": "skill_progress",
+                            "data": json.dumps({
+                                **skill_event,
+                                "event": "skill_progress",
+                                "skill_event": skill_event.get("event"),
+                                "workflow_step": step_idx + 1,
+                            }, default=str),
+                        }
+                    if not any(event.get("event") == "skill_done" for event in skill_events):
+                        raise RuntimeError(f"Skill '{skill_name}' ended without a completion event")
+                    tracker.complete_step(sid, output_summary=f"Skill '{skill_name}' completed")
+                    step_context[step_idx] = {
+                        "skill": skill_name,
+                        "status": "completed",
+                        "events": skill_events[-3:],
+                    }
                     yield {
                         "event": "step_done",
-                        "data": json.dumps({"event": "step_done", "type": "skill", "message": f"Skill: {skill_name}"}),
+                        "data": json.dumps({"event": "step_done", "type": "skill", "message": f"Skill '{skill_name}' completed"}),
                     }
-                    step_context[step_idx] = {"skill": skill_name, "status": "completed"}
 
                 elif step.type in ("analyze", "insight"):
                     raw_prompt = step.config.get("prompt", "Analyze the results.")
@@ -322,17 +430,13 @@ async def run_workflow(
                     }
 
                 else:
-                    tracker.complete_step(sid, output_summary=f"Unknown step type: {step.type}")
-                    yield {
-                        "event": "step_done",
-                        "data": json.dumps({"event": "step_done", "type": step.type, "warning": f"Unknown step type: {step.type}"}),
-                    }
+                    raise ValueError(f"Unknown step type: {step.type}")
 
                 completed_steps.append(step_idx)
 
             except Exception as step_err:
                 # Partial failure: record error, preserve completed steps
-                tracker.complete_step(sid, output_summary=f"ERROR: {str(step_err)[:200]}")
+                tracker.fail_step(sid, str(step_err)[:1000])
                 partial_error = str(step_err)
                 yield {
                     "event": "step_error",
@@ -341,9 +445,13 @@ async def run_workflow(
                 break  # Stop on first failure
 
         # Update workflow metadata
-        wf.last_run_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        wf.status = "active"
-        db.commit()
+        with SessionLocal() as stream_db:
+            persisted_workflow = stream_db.query(Workflow).filter(Workflow.id == workflow_id).first()
+            if persisted_workflow:
+                persisted_workflow.last_run_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                if not partial_error:
+                    persisted_workflow.status = "active"
+                stream_db.commit()
 
         token_estimate = len(json.dumps(step_context, default=str))
         if partial_error:

@@ -45,7 +45,11 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    user = User(email=req.email, hashed_password=hash_password(req.password))
+    user = User(
+        email=req.email,
+        hashed_password=hash_password(req.password),
+        is_admin=db.query(User).count() == 0,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)

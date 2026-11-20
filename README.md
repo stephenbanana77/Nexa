@@ -11,14 +11,14 @@ The project is intentionally scoped around one hard problem:
 - AST-based SQL safety layer that only allows read-only single-statement queries, blocks DDL/DML operations, applies row limits, and records policy decisions.
 - Run-level lineage that preserves the question, schema snapshot, SQL attempts, policy decisions, result samples, retries, errors, and final answer.
 - Semantic Layer for governed metrics and dimensions, so the agent can reason with business definitions instead of raw column guesses.
-- Insight Report generation that turns a dataset into an analyst-style diagnostic report with executive summary, key metrics, contribution concentration, margin lens, outlier scan, underperforming segments, risks, opportunities, follow-up questions, and SQL evidence blocks.
+- Governed Insight Report generation that uses only approved metrics and dimensions; without approved definitions it creates a draft data profile instead of inventing business conclusions.
 - Auto Investigation workflow that proactively creates Data Detective cards with finding, impact, SQL evidence, confidence, and one-click follow-up questions.
 - Hypothesis Engine that turns each finding into testable hypotheses, validation plans, current assessments, and one-click hypothesis checks.
 - Decision Brief generation that converts investigations into executive-ready situation, diagnosis, evidence, risk, recommendation, and next-metric summaries.
 - Analysis Graph that visualizes the chain from dataset and semantic layer to findings, hypotheses, SQL evidence, and decision brief.
 - Metric Contract Check that audits semantic metric/dimension definitions against dataset columns, SQL safety policy, missingness, and answerability gates.
 - Analysis memory that injects recent questions and report findings into follow-up analysis, supporting longer-running analysis threads.
-- Local LLM provider settings for switching between DeepSeek and Kimi/Moonshot without exposing API keys in the browser.
+- Administrator-controlled local LLM settings for DeepSeek, Kimi/Moonshot, and OpenAI-compatible services without returning API keys to the browser.
 - LangGraph agent pipeline with SQL retry separated from system retry, reducing repeated full-pipeline retries and making failures auditable.
 - Production-oriented baseline: pytest, frontend lint/build, GitHub Actions CI, Docker Compose, Alembic migrations, route-level code splitting.
 
@@ -27,7 +27,7 @@ The project is intentionally scoped around one hard problem:
 These commands were last run locally:
 
 ```text
-backend pytest: 84 passed
+backend pytest: 107 passed
 frontend lint: passed
 frontend build: passed
 ```
@@ -57,7 +57,7 @@ flowchart LR
   M --> C
   C --> D["Generate SQL"]
   D --> E["AST SQL Policy"]
-  E -->|Allowed| F["DuckDB / MySQL execution"]
+  E -->|Allowed| F["DuckDB execution"]
   E -->|Blocked| G["Safe failure"]
   F --> H["Analyze result"]
   H --> I["Charts and answer"]
@@ -88,21 +88,24 @@ flowchart LR
 | Data quality gate | Working | Fresh row-count, missing-value, duplicate, negative-value, and schema-drift checks |
 | SQL safety policy | Working | AST-based read-only validation, single-statement enforcement, auto-limit, risk flags |
 | Run History | Working | Step timeline plus lineage evidence chain |
-| Semantic Layer | Working | Auto-seeds metrics/dimensions from schema and supports custom business definitions |
-| Metric approval workflow | Working MVP | Definitions start as drafts and can be approved before report publication |
-| Insight Reports | Working | Generates analyst-style diagnostic reports with concentration, margin, outlier, underperformer, risk, opportunity, follow-up, and SQL evidence sections |
-| Report publication gate | Working MVP | Reports remain drafts until data quality and metric approval checks pass |
+| Semantic Layer | Working | Auto-seeds conservative suggestions; only SQL-validated, approved definitions enter Agent/report context |
+| Metric approval workflow | Working | Approval validates quoted column lineage, SQL policy, dataset ownership, and real execution |
+| Insight Reports | Working | Approved definitions produce SQL-backed analysis; ungoverned datasets produce a draft profile marked for review |
+| Report publication gate | Working | Requires passing quality, report-snapshot metric approval, and passing metric contracts |
 | Auto Investigation | Working | Proactively creates Data Detective cards with finding, impact, evidence, confidence, and one-click follow-up |
 | Hypothesis Engine | Working | Converts findings into testable hypotheses with validation plans, assessments, evidence links, and follow-up actions |
 | Decision Brief | Working | Turns investigations into executive-ready situation, diagnosis, evidence, risk, recommendation, action, and next-metric summaries |
 | Analysis Graph | Working | Visualizes Dataset → Semantic Layer → Finding → Hypothesis → Evidence → Decision Brief lineage |
 | Metric Contract Check | Working | Audits metric/dimension definitions for column existence, SQL safety, missingness, and answerability before sharing conclusions |
 | Analysis Memory | Working | Uses recent messages and reports as follow-up context |
-| LLM Provider Settings | Working | Switch DeepSeek/Kimi, save local `.env`, test active provider without returning raw keys |
+| LLM Provider Settings | Working | Local administrator can configure DeepSeek/Kimi/OpenAI-compatible endpoints; raw keys are never returned |
 | Demo Mode | Working | One-click Superstore project with dataset, semantic layer, and first report |
 | Offline evaluation | Working | 12 Superstore cases, expandable to 30-50 |
-| Workflow engine | Working MVP | Save/edit/rerun analysis pipelines; still intentionally simple |
-| Skill system | Working MVP | Built-in manifest-based skills with local routing, dataset binding, step deadlines, cancellation, and failure state tracking |
+| Workflow engine | Working MVP | Manual runs bind immutable dataset IDs, execute SQL/Skill steps, and persist status/error lineage; scheduling is not connected |
+| Skill system | Working MVP | Four executable manifest-based skills; empty placeholder manifests are hidden and failed steps cannot report success |
+| Notebook | Working MVP | Notebook-level dataset binding, governed SQL, and isolated Python subprocesses with a 5-second timeout |
+| MySQL | Limited | Session-only table connection, schema/preview/quality/direct SQL; advanced analysis requires an imported snapshot |
+| Sharing and roles | Not implemented | No member, role, or read-only link workflow yet |
 | Frontend performance | Improved | Route/tab lazy loading and vendor chunk splitting |
 | CI | Working | GitHub Actions runs backend tests, frontend lint, frontend build |
 
@@ -226,18 +229,20 @@ Nexa/
 - Implemented run-level lineage tracking that captures question, schema snapshot, generated SQL, policy decisions, retries, result samples, and final answer for reproducible analysis.
 - Added a governed Semantic Layer, provider settings, demo mode, diagnostic Insight Report generator, Auto Investigation workflow, Hypothesis Engine, Decision Brief, Analysis Graph, and Metric Contract Check, turning uploaded datasets into reusable business metrics, executive-ready briefs, testable Data Detective cards, traceable analysis graphs, answerability gates, one-click follow-ups, and SQL-backed evidence blocks.
 - Created an offline evaluation harness with golden SQL cases measuring policy pass rate, execution success, semantic accuracy, and latency, turning prompt/model changes into measurable regressions.
-- Hardened engineering baseline with 84 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
+- Hardened engineering baseline with 107 backend tests, frontend lint/build checks, GitHub Actions CI, route-level code splitting, and Alembic migration support.
 
 ## Honest Boundaries
 
-Nexa is still a portfolio-grade project, not an enterprise BI platform.
+Nexa is an actively hardened single-workspace MVP, not an enterprise BI platform.
 
 本项目的真实业务使用复核见：[真实业务使用问题审查报告](docs/真实业务使用问题审查报告.md)。
 
 - The evaluation suite has 12 deterministic golden cases and should be expanded to 30-50 cases.
 - Token usage is still estimated, not provider-reported.
-- Workflow execution is an MVP and does not yet support branching, scheduling, or durable resumability.
-- Python notebook execution still needs sandboxing before being treated as production-safe.
+- Workflow execution is manual and does not yet support branching, scheduling, or durable resumability.
+- Python cells run in a separate process with a timeout, but do not yet have OS/container-level filesystem and network isolation.
+- MySQL credentials are intentionally not persisted; connections expire on server restart and advanced analysis requires importing a snapshot.
+- Team sharing, roles, read-only links, and approval assignment are not implemented.
 - The SQL policy records high-risk patterns like `SELECT *` and joins without conditions, but only blocks clearly unsafe operations today.
 - Agent and Skill deadlines are configurable through `LLM_TIMEOUT`, `AGENT_TIMEOUT_SEC`, `SKILL_TIMEOUT_SEC`, and `SKILL_STEP_TIMEOUT_SEC`; provider latency can still affect end-to-end response time.
 
@@ -249,7 +254,9 @@ Nexa is still a portfolio-grade project, not an enterprise BI platform.
 | P0 | Record provider token usage and latency | Make cost/performance claims real |
 | P1 | Add SQL dry-run / EXPLAIN checks | Catch expensive or invalid queries before execution |
 | P1 | Add demo seed command and hosted demo | Make the project easier to review |
-| P2 | Sandbox notebook Python | Close the largest remaining security gap |
+| P1 | Add scheduler and durable workflow workers | Make weekly/new-data automation real |
+| P1 | Add organization roles and share links | Support reviewer/publisher workflows safely |
+| P2 | Container-sandbox notebook Python | Add filesystem, memory, and network isolation |
 
 ## License
 

@@ -70,7 +70,7 @@ def _risk_flags(expression: exp.Expression, had_limit: bool) -> list[str]:
     return flags
 
 
-def inspect_sql_policy(sql: str) -> SQLPolicyDecision:
+def inspect_sql_policy(sql: str, dialect: str = "duckdb") -> SQLPolicyDecision:
     """Return a structured SQL policy decision for auditability."""
     original_sql = sql or ""
     if not sql or not sql.strip():
@@ -81,7 +81,7 @@ def inspect_sql_policy(sql: str) -> SQLPolicyDecision:
         )
 
     try:
-        statements = [stmt for stmt in parse(sql, read="duckdb") if stmt is not None]
+        statements = [stmt for stmt in parse(sql, read=dialect) if stmt is not None]
     except sqlglot_errors.ParseError as exc:
         return SQLPolicyDecision(
             is_safe=False,
@@ -122,14 +122,14 @@ def inspect_sql_policy(sql: str) -> SQLPolicyDecision:
     return SQLPolicyDecision(
         is_safe=True,
         original_sql=original_sql,
-        final_sql=statement.sql(dialect="duckdb", comments=False),
+        final_sql=statement.sql(dialect=dialect, comments=False),
         operation=operation,
         auto_limit_added=not had_limit,
         risk_flags=_risk_flags(statement, had_limit),
     )
 
 
-def validate_sql(sql: str) -> tuple[bool, str]:
+def validate_sql(sql: str, dialect: str = "duckdb") -> tuple[bool, str]:
     """Parse SQL with an AST policy and add a safety limit.
 
     Rules:
@@ -138,7 +138,7 @@ def validate_sql(sql: str) -> tuple[bool, str]:
     - Blocks multi-statement payloads.
     - Auto-adds a top-level LIMIT when missing.
     """
-    decision = inspect_sql_policy(sql)
+    decision = inspect_sql_policy(sql, dialect=dialect)
     if not decision.is_safe:
         return False, decision.reason or "SQL query is not allowed."
     return True, decision.final_sql or sql

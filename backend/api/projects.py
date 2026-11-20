@@ -1,6 +1,8 @@
 """Project and Dataset API routes."""
 import os
 import shutil
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
@@ -11,7 +13,7 @@ from database import get_db
 from models.user import User
 from models.project import Project, Dataset
 from services.auth import get_current_user
-from services.dataset_tables import dataset_table_name
+from services.dataset_tables import dataset_engine_key, dataset_table_name
 from utils.config import settings
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -94,8 +96,27 @@ def create_superstore_demo(
 
     from services.semantic_layer import seed_semantic_layer_from_schema
     from services.analysis_reports import generate_report
+    from models.project import SemanticDimension, SemanticMetric
 
     seed_semantic_layer_from_schema(db, project.id, dataset.id, schema_info)
+    # The bundled fixture has known demo definitions. Explicitly approve only
+    # those definitions before creating the first governed report.
+    sales_metric = db.query(SemanticMetric).filter(
+        SemanticMetric.project_id == project.id,
+        SemanticMetric.dataset_id == dataset.id,
+        SemanticMetric.name == "Total Sales",
+    ).first()
+    region_dimension = db.query(SemanticDimension).filter(
+        SemanticDimension.project_id == project.id,
+        SemanticDimension.dataset_id == dataset.id,
+        SemanticDimension.name == "Region",
+    ).first()
+    for definition in (sales_metric, region_dimension):
+        if definition:
+            definition.status = "approved"
+            definition.approved_at = datetime.now(UTC)
+            definition.approved_by = current_user.id
+    db.commit()
     report = generate_report(db, project.id, dataset, "Superstore Executive Insight Report")
     return {
         "project_id": project.id,
@@ -245,9 +266,10 @@ async def upload_dataset(
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
     os.makedirs(settings.STORAGE_PATH, exist_ok=True)
-    safe_name = "".join(c for c in file.filename if c.isalnum() or c in "._-")
+    dataset_id = str(uuid.uuid4())
+    safe_name = "".join(c for c in (file.filename or "upload") if c.isalnum() or c in "._-")
     safe_name = safe_name.strip(". ") or "upload"
-    file_path = os.path.join(settings.STORAGE_PATH, f"{project_id}_{safe_name}")
+    file_path = os.path.join(settings.STORAGE_PATH, f"{project_id}_{dataset_id}_{safe_name}")
     contents = await file.read()
     with open(file_path, "wb") as f:
         f.write(contents)
@@ -274,7 +296,7 @@ async def upload_dataset(
     for col in df.columns:
         dtype = str(df[col].dtype)
         missing = int(df[col].isna().sum())
-        missing_pct = round(missing / len(df) * 100, 1)
+        missing_pct = round(missing / len(df) * 100, 1) if len(df) else 0.0
         schema_info.append({
             "name": col,
             "type": dtype,
@@ -282,7 +304,25 @@ async def upload_dataset(
             "missing_pct": missing_pct,
         })
 
+    from tools import load_dataset, get_engine
+
+    table_name = dataset_table_name(dataset_id)
+    try:
+        load_dataset(project_id, file_path, ext.lstrip("."), table_name=table_name)
+        engine = get_engine(project_id)
+        canonical_types = {column.name: column.type for column in engine.get_schema(table_name)}
+    except Exception as exc:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=400, detail=f"Failed to load dataset: {str(exc)}")
+
+    for column in schema_info:
+        column["type"] = canonical_types.get(column["name"], column["type"])
+
     dataset = Dataset(
+        id=dataset_id,
         project_id=project_id,
         name=file.filename or "dataset",
         source_type=ext.lstrip("."),
@@ -297,11 +337,6 @@ async def upload_dataset(
 
     from services.semantic_layer import seed_semantic_layer_from_schema
     seed_semantic_layer_from_schema(db, project_id, dataset.id, schema_info)
-
-    from tools import load_dataset, get_engine
-
-    load_dataset(project_id, file_path, dataset.source_type)
-    engine = get_engine(project_id)
 
     # Register as Resource
     from resources.registry import register_resource
@@ -321,7 +356,7 @@ async def upload_dataset(
         "row_count": dataset.row_count,
         "column_count": dataset.column_count,
         "schema_info": schema_info,
-        "preview": engine.preview(limit=1000),
+        "preview": engine.preview(table_name=table_name, limit=1000),
     }
 
 
@@ -346,6 +381,9 @@ def list_datasets(
             "project_id": d.project_id,
             "row_count": d.row_count,
             "column_count": d.column_count,
+            "schema_info": d.schema_info or [],
+            "source_type": d.source_type,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
         }
         for d in datasets
     ]
@@ -380,6 +418,58 @@ def get_dataset(
     }
 
 
+@router.delete("/datasets/by-id/{dataset_id}")
+def delete_dataset(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    project = db.query(Project).filter(
+        Project.id == dataset.project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    file_path = dataset.file_path
+    from models.project import AnalysisReport, Notebook, SemanticDimension, SemanticMetric
+    from models.workflow import Workflow
+
+    referenced_by_workflow = []
+    for workflow in db.query(Workflow).filter(Workflow.project_id == dataset.project_id).all():
+        if dataset_id in ((workflow.inputs or {}).get("dataset_ids") or []):
+            referenced_by_workflow.append(workflow.name)
+    if referenced_by_workflow:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dataset is used by workflow(s): {', '.join(referenced_by_workflow)}. Unbind it before deleting.",
+        )
+    notebook_count = db.query(Notebook).filter(Notebook.dataset_id == dataset_id).count()
+    report_count = db.query(AnalysisReport).filter(AnalysisReport.dataset_id == dataset_id).count()
+    if notebook_count or report_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dataset is referenced by {notebook_count} notebook(s) and {report_count} report(s). Remove those references before deleting.",
+        )
+
+    db.query(SemanticMetric).filter(SemanticMetric.dataset_id == dataset_id).delete()
+    db.query(SemanticDimension).filter(SemanticDimension.dataset_id == dataset_id).delete()
+    if dataset.source_type == "mysql":
+        from tools.query_engine import engine_registry
+        engine_registry.remove(dataset_engine_key(dataset.project_id, dataset.id, dataset.source_type))
+    db.delete(dataset)
+    db.commit()
+    if file_path:
+        try:
+            os.remove(file_path)
+        except FileNotFoundError:
+            pass
+    return {"status": "deleted", "id": dataset_id}
+
+
 class QueryRequest(BaseModel):
     sql: str
 
@@ -404,11 +494,17 @@ def preview_dataset(
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     from tools import get_engine, load_dataset
+    from tools.query_engine import engine_registry
 
-    load_dataset(project.id, dataset.file_path, dataset.source_type)
-    engine = get_engine(project.id)
+    table_name = dataset.file_path if dataset.source_type == "mysql" else dataset_table_name(dataset.id)
+    engine_key = dataset_engine_key(project.id, dataset.id, dataset.source_type)
+    if dataset.source_type == "mysql" and not engine_registry.has(engine_key):
+        raise HTTPException(status_code=409, detail="MySQL session has expired. Reconnect this table before previewing it.")
+    if dataset.source_type != "mysql":
+        load_dataset(project.id, dataset.file_path, dataset.source_type, table_name=table_name)
+    engine = get_engine(engine_key)
 
-    return engine.preview(limit=limit)
+    return engine.preview(table_name=table_name, limit=limit)
 
 
 @router.get("/datasets/by-id/{dataset_id}/quality")
@@ -452,18 +548,27 @@ def query_dataset(
 
     from tools import get_engine, load_dataset
     from services.sql_policy import QUERY_TIMEOUT_SEC, validate_sql
+    from tools.query_engine import engine_registry
 
     # Enforce the same SQL safety policy as the Chat Agent
-    is_safe, result = validate_sql(req.sql)
+    dialect = "mysql" if dataset.source_type == "mysql" else "duckdb"
+    is_safe, result = validate_sql(req.sql, dialect=dialect)
     if not is_safe:
         raise HTTPException(status_code=400, detail=result)
     safe_sql = result
 
-    load_dataset(project.id, dataset.file_path, dataset.source_type)
-    engine = get_engine(project.id)
+    from services.dataset_tables import bind_table
+
+    table_name = dataset.file_path if dataset.source_type == "mysql" else dataset_table_name(dataset.id)
+    engine_key = dataset_engine_key(project.id, dataset.id, dataset.source_type)
+    if dataset.source_type == "mysql" and not engine_registry.has(engine_key):
+        raise HTTPException(status_code=409, detail="MySQL session has expired. Reconnect this table before querying it.")
+    if dataset.source_type != "mysql":
+        load_dataset(project.id, dataset.file_path, dataset.source_type, table_name=table_name)
+    engine = get_engine(engine_key)
 
     try:
-        return engine.query(safe_sql, timeout_sec=QUERY_TIMEOUT_SEC)
+        return engine.query(bind_table(safe_sql, table_name, dialect=dialect), timeout_sec=QUERY_TIMEOUT_SEC)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
 
@@ -569,6 +674,7 @@ class MySQLConnectRequest(BaseModel):
     user: str
     password: SecretStr
     database: str
+    table: str | None = None
 
 
 @router.post("/datasets/connect-mysql")
@@ -587,35 +693,70 @@ def connect_mysql(
         raise HTTPException(status_code=404, detail="Project not found")
 
     from tools import register_mysql, get_engine
+    from tools.query_engine import engine_registry
 
     try:
-        register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)
+        register_mysql(
+            req.project_id,
+            req.host,
+            req.port,
+            req.user,
+            req.password.get_secret_value(),
+            req.database,
+        )
         connector = get_engine(req.project_id)
         tables = connector.get_tables()
 
-        # Create a virtual dataset entry for the MySQL connection
+        if not req.table:
+            return {
+                "status": "select_table",
+                "tables": tables,
+                "connection_lifetime": "session_only",
+                "message": "Choose one table. This connection must be re-established after a server restart.",
+            }
+        selected = next((table for table in tables if table["name"] == req.table), None)
+        if not selected:
+            raise HTTPException(status_code=400, detail="Selected MySQL table does not exist")
+        schema = connector.get_schema(req.table)
+
         dataset = Dataset(
             project_id=req.project_id,
-            name=f"mysql://{req.database}",
+            name=f"mysql://{req.database}/{req.table}",
             source_type="mysql",
-            file_path="",
-            row_count=sum(t["row_count"] for t in tables),
-            column_count=0,
+            file_path=req.table,
+            row_count=selected["row_count"],
+            column_count=len(schema),
             schema_info=[
-                {"name": t["name"], "type": "table", "missing_pct": 0, "missing_count": 0}
-                for t in tables
+                {"name": column.name, "type": column.type, "missing_pct": 0, "missing_count": 0}
+                for column in schema
             ],
         )
         db.add(dataset)
         db.commit()
         db.refresh(dataset)
+        dedicated_key = dataset_engine_key(req.project_id, dataset.id, "mysql")
+        register_mysql(
+            dedicated_key,
+            req.host,
+            req.port,
+            req.user,
+            req.password.get_secret_value(),
+            req.database,
+        )
+        engine_registry.remove(req.project_id)
 
         return {
             "id": dataset.id,
             "name": dataset.name,
             "tables": tables,
             "row_count": dataset.row_count,
+            "column_count": dataset.column_count,
+            "schema_info": dataset.schema_info,
+            "source_type": "mysql",
+            "connection_lifetime": "session_only",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"MySQL connection failed: {str(e)}")
 

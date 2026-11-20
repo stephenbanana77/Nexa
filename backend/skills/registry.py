@@ -17,15 +17,15 @@ class SkillRegistry:
 
     def list_all(self) -> list[dict]:
         """List all available skills (DB + runtime)."""
-        skills = []
+        skills_by_name = {}
         for name, defn in self._runtime_skills.items():
-            skills.append({"name": name, **defn})
+            skills_by_name[name] = {"name": name, **defn}
         # Also load from DB
         db = SessionLocal()
         try:
             db_skills = db.query(Skill).all()
             for s in db_skills:
-                skills.append({
+                persisted = {
                     "id": s.id,
                     "name": s.name,
                     "title": s.title,
@@ -35,10 +35,14 @@ class SkillRegistry:
                     "definition": s.definition,
                     "version": s.version,
                     "is_builtin": s.is_builtin,
-                })
+                }
+                if s.name in skills_by_name:
+                    skills_by_name[s.name] = {**skills_by_name[s.name], "id": s.id}
+                else:
+                    skills_by_name[s.name] = persisted
         finally:
             db.close()
-        return skills
+        return list(skills_by_name.values())
 
     def list_by_category(self, category: str) -> list[dict]:
         return [s for s in self.list_all() if s.get("category") == category]
@@ -47,10 +51,18 @@ class SkillRegistry:
         """Get a skill by name or ID."""
         # Check runtime first
         if name_or_id in self._runtime_skills:
-            return {
+            runtime = {
                 "name": name_or_id,
                 **self._runtime_skills[name_or_id],
             }
+            db = SessionLocal()
+            try:
+                persisted = db.query(Skill).filter(Skill.name == name_or_id).first()
+                if persisted:
+                    runtime["id"] = persisted.id
+            finally:
+                db.close()
+            return runtime
         # Check DB
         db = SessionLocal()
         try:

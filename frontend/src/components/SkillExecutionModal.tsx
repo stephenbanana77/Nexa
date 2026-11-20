@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Select, message, Steps } from "antd";
+import { Alert, Modal, Select, message, Steps } from "antd";
 import ReactECharts from "echarts-for-react";
 import ReactMarkdown from "react-markdown";
 import { tokens } from "../theme";
@@ -32,6 +32,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<StepState[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
   const [output, setOutput] = useState<{
     chart?: Record<string, unknown>;
     insight?: string;
@@ -43,6 +44,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
     if (!skill || !selectedDataset) return;
 
     setRunning(true);
+    setErrorMessage("");
     const def = skill.definition;
     setSteps(def.steps.map((s: { type: string }) => ({ type: s.type, status: "wait" as const })));
 
@@ -58,6 +60,10 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
         },
         body: JSON.stringify({ project_id: projectId, dataset_id: selectedDataset, params: {} }),
       });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail || `技能启动失败（${response.status}）`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -95,14 +101,19 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
               }
             } else if (evt === "step_error") {
               setSteps((prev) => prev.map((s, i) => i === data.step - 1 ? { ...s, status: "error" as const } : s));
+              setErrorMessage(data.message || "技能步骤执行失败");
+            } else if (["skill_failed", "timeout", "error"].includes(evt)) {
+              setErrorMessage(data.message || "技能执行失败");
             }
           } catch {
             // Ignore malformed SSE fragments; the stream may split JSON across chunks.
           }
         }
       }
-    } catch {
-      message.error("技能执行失败，请稍后重试");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "技能执行失败，请稍后重试";
+      setErrorMessage(detail);
+      message.error(detail);
     } finally {
       setRunning(false);
     }
@@ -111,6 +122,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
   const onClose_ = () => {
     setSteps([]);
     setOutput({});
+    setErrorMessage("");
     setRunning(false);
     setSelectedDataset(null);
     onClose();
@@ -163,6 +175,8 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
               status: s.status === "error" ? "error" : s.status === "finish" ? "finish" : s.status === "process" ? "process" : "wait",
             }))}
           />
+
+          {errorMessage && <Alert type="error" showIcon message="技能未完成" description={errorMessage} style={{ marginTop: 16 }} />}
 
           {output.chart && (
             <div style={{ marginTop: tokens.spacing.lg }}>

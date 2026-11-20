@@ -42,14 +42,17 @@ def create_connection(
     if req.engine == "postgresql":
         connector = PostgreSQLConnector(
             host=req.host, port=req.port, user=req.user,
-            password=req.password, database=req.database,
+            password=req.password.get_secret_value(), database=req.database,
         )
         if not connector.health_check():
             raise HTTPException(status_code=400, detail="Connection failed")
         engine_registry.register(req.project_id, connector)
     elif req.engine == "mysql":
         from tools import register_mysql, get_engine
-        register_mysql(req.project_id, req.host, req.port, req.user, req.password, req.database)
+        register_mysql(
+            req.project_id, req.host, req.port, req.user,
+            req.password.get_secret_value(), req.database,
+        )
         connector = get_engine(req.project_id)
     elif req.engine == "googlesheets":
         if not req.sheet_url:
@@ -79,6 +82,7 @@ def create_connection(
         "name": req.name,
         "engine": req.engine,
         "tables": tables,
+        "connection_lifetime": "session_only",
     }
 
 
@@ -115,4 +119,5 @@ def delete_connection(
     if not resource or resource.get("project_id") != project_id:
         raise HTTPException(status_code=404, detail="Connection not found")
     delete_resource(resource["uri"])
+    engine_registry.remove(project_id)
     return {"status": "deleted"}

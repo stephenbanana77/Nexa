@@ -40,6 +40,8 @@ def create_report(
     dataset = dataset_query.order_by(Dataset.created_at.desc()).first()
     if not dataset:
         raise HTTPException(status_code=400, detail="No dataset available for report")
+    if dataset.source_type == "mysql":
+        raise HTTPException(status_code=400, detail="MySQL report generation is not connected yet; import a snapshot before generating a report")
     report = generate_report(db, req.project_id, dataset, req.title)
     return serialize_report(report)
 
@@ -57,6 +59,8 @@ def create_auto_investigation(
     dataset = dataset_query.order_by(Dataset.created_at.desc()).first()
     if not dataset:
         raise HTTPException(status_code=400, detail="No dataset available for investigation")
+    if dataset.source_type == "mysql":
+        raise HTTPException(status_code=400, detail="MySQL investigation is not connected yet; import a snapshot before generating a report")
     title = req.title or f"{dataset.name} Auto Investigation"
     report = generate_report(db, req.project_id, dataset, title)
     return serialize_report(report)
@@ -117,16 +121,30 @@ def publish_report(
         raise HTTPException(status_code=400, detail="Report dataset not found")
 
     quality = check_dataset_quality(report.project_id, dataset)
-    if quality["status"] == "fail":
-        raise HTTPException(status_code=400, detail={"message": "Fix blocking data quality issues before publishing.", "quality": quality})
+    if quality["status"] != "pass":
+        raise HTTPException(status_code=400, detail={"message": "Resolve data quality warnings and errors before publishing.", "quality": quality})
 
-    approved_metric = db.query(SemanticMetric).filter(
+    snapshot_metrics = list((report.semantic_snapshot or {}).get("metrics") or [])
+    snapshot_metric_ids = [item.get("id") for item in snapshot_metrics if item.get("id")]
+    if not snapshot_metric_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="This report snapshot has no approved metric. Approve a metric and regenerate the report before publishing.",
+        )
+
+    approved_metrics = db.query(SemanticMetric).filter(
+        SemanticMetric.id.in_(snapshot_metric_ids),
         SemanticMetric.project_id == report.project_id,
         SemanticMetric.status == "approved",
         (SemanticMetric.dataset_id == report.dataset_id) | (SemanticMetric.dataset_id.is_(None)),
-    ).first()
-    if not approved_metric:
-        raise HTTPException(status_code=400, detail="Approve at least one metric before publishing this report")
+    ).all()
+    if {metric.id for metric in approved_metrics} != set(snapshot_metric_ids):
+        raise HTTPException(status_code=400, detail="A metric used by this report is no longer approved. Regenerate the report.")
+
+    contracts = (report.content or {}).get("metric_contracts") or {}
+    release_gate = contracts.get("release_gate") or {}
+    if contracts.get("status") != "pass" or release_gate.get("requires_review"):
+        raise HTTPException(status_code=400, detail="Resolve the report metric contract warnings before publishing.")
 
     now = datetime.now(UTC)
     report.status = "published"
@@ -138,7 +156,7 @@ def publish_report(
         "published_at": now.isoformat(),
         "published_by": current_user.id,
         "quality_status": quality["status"],
-        "approved_metric": approved_metric.name,
+        "approved_metrics": [metric.name for metric in approved_metrics],
     }
     report.content = content
     db.commit()

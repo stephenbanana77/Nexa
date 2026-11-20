@@ -1,6 +1,9 @@
 """Skill manifest validation tests."""
 import json
 
+from skills import skill_registry
+from skills.builtin import register_builtin_skills
+
 
 def _valid_definition():
     return {
@@ -46,7 +49,7 @@ def test_skill_preview_no_actions(client, auth_headers):
         "definition": {"name": "empty", "type": "analysis", "actions": []},
     }, headers=auth_headers)
     assert resp.status_code == 400
-    assert "action" in resp.json()["detail"].lower()
+    assert "step" in resp.json()["detail"].lower()
 
 
 def test_skill_preview_unknown_action_type(client, auth_headers):
@@ -102,6 +105,19 @@ def test_skill_install_non_dict_definition(client, auth_headers):
     assert resp.status_code in (400, 422)
 
 
+def test_legacy_actions_are_normalized_to_executable_steps(client, auth_headers):
+    response = client.post("/api/skills/install", json={
+        "name": "legacy-skill",
+        "title": "Legacy Skill",
+        "definition": _valid_definition(),
+    }, headers=auth_headers)
+    assert response.status_code == 200, response.text
+
+    detail = client.get(f"/api/skills/{response.json()['id']}", headers=auth_headers)
+    assert [step["type"] for step in detail.json()["definition"]["steps"]] == ["sql", "visualize"]
+    assert "actions" not in detail.json()["definition"]
+
+
 def test_skill_execution_history_requires_project_ownership(
     client, auth_headers, project_id
 ):
@@ -119,3 +135,12 @@ def test_skill_execution_history_requires_project_ownership(
         f"/api/skills/executions/{project_id}", headers=other_headers
     )
     assert response.status_code == 404
+
+
+def test_builtin_catalog_only_exposes_executable_permissioned_skills():
+    register_builtin_skills()
+    skills = {item["name"]: item for item in skill_registry.list_all()}
+    assert {"data_summary", "correlation_analysis", "top_bottom_finder", "trend_analysis"} <= set(skills)
+    assert "schema_inspector" not in skills
+    assert skills["data_summary"]["definition"]["steps"]
+    assert skills["data_summary"]["permissions"]["read"] == ["schema", "data"]

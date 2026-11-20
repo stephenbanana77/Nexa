@@ -10,6 +10,11 @@ _TECHNICAL_FIELD_TOKENS = (
     "id", "code", "key", "index", "row", "zip", "postal", "latitude", "longitude",
 )
 
+_ADDITIVE_MEASURE_TOKENS = (
+    "sales", "revenue", "amount", "profit", "income", "cost", "expense",
+    "quantity", "qty", "units", "count", "cnt", "orders", "volume",
+)
+
 
 def _is_technical_numeric_field(name: str) -> bool:
     """Avoid treating identifiers and location codes as additive business metrics."""
@@ -18,6 +23,12 @@ def _is_technical_numeric_field(name: str) -> bool:
     return bool(tokens.intersection(_TECHNICAL_FIELD_TOKENS)) or any(
         normalized.startswith(prefix) for prefix in ("row", "index", "postal", "zip")
     )
+
+
+def _is_additive_measure(name: str) -> bool:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    tokens = set(normalized.split("_"))
+    return any(token in tokens or token in normalized for token in _ADDITIVE_MEASURE_TOKENS)
 
 
 def list_semantic_layer(
@@ -68,15 +79,17 @@ def list_semantic_layer(
 def semantic_context_text(db: Session, project_id: str, dataset_id: str | None = None) -> str:
     """Render semantic definitions as prompt/schema context."""
     layer = list_semantic_layer(db, project_id, dataset_id)
+    metrics = [item for item in layer["metrics"] if item.get("status") == "approved"]
+    dimensions = [item for item in layer["dimensions"] if item.get("status") == "approved"]
     lines: list[str] = []
-    if layer["metrics"]:
+    if metrics:
         lines.append("BUSINESS METRICS:")
-        for metric in layer["metrics"]:
+        for metric in metrics:
             desc = f" -- {metric['description']}" if metric.get("description") else ""
             lines.append(f"- {metric['name']} = {metric['expression']}{desc}")
-    if layer["dimensions"]:
+    if dimensions:
         lines.append("BUSINESS DIMENSIONS:")
-        for dim in layer["dimensions"]:
+        for dim in dimensions:
             desc = f" -- {dim['description']}" if dim.get("description") else ""
             lines.append(f"- {dim['name']} maps to column \"{dim['column']}\"{desc}")
     return "\n".join(lines)
@@ -113,7 +126,11 @@ def seed_semantic_layer_from_schema(
         dtype = str(col.get("type", "")).lower()
         if not name:
             continue
-        if any(token in dtype for token in numeric_tokens) and not _is_technical_numeric_field(name):
+        if (
+            any(token in dtype for token in numeric_tokens)
+            and not _is_technical_numeric_field(name)
+            and _is_additive_measure(name)
+        ):
             metric_name = f"Total {name}"
             if metric_name.lower() not in existing_metrics:
                 db.add(SemanticMetric(

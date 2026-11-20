@@ -1,8 +1,10 @@
 """Insight Report generation with SQL evidence and analysis memory."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
+import math
 import re
 
 from sqlalchemy.orm import Session
@@ -33,9 +35,23 @@ def _is_temporal_field(name: str) -> bool:
     return bool(tokens.intersection({"date", "time", "timestamp", "month", "quarter", "year"}))
 
 
+def _is_additive_business_field(name: str) -> bool:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    tokens = set(normalized.split("_"))
+    additive = {
+        "sales", "revenue", "amount", "profit", "income", "cost", "expense",
+        "quantity", "qty", "units", "count", "cnt", "orders", "volume",
+    }
+    return any(token in tokens or token in normalized for token in additive)
+
+
 def _business_numeric_columns(schema: list[dict]) -> list[dict]:
     numeric = [c for c in schema if _is_numeric(str(c.get("type", "")))]
-    usable = [c for c in numeric if not _is_technical_field(str(c.get("name", "")))]
+    usable = [
+        c for c in numeric
+        if not _is_technical_field(str(c.get("name", "")))
+        and _is_additive_business_field(str(c.get("name", "")))
+    ]
     # Prefer common business measures when several candidates remain.
     priority = ("sales", "revenue", "amount", "profit", "income", "quantity", "count")
     return sorted(usable, key=lambda c: next(
@@ -202,7 +218,29 @@ def _pick_margin_columns(numeric: list[dict]) -> tuple[str, str] | None:
     denominator = next((name for name in names if any(token in name.lower() for token in ("sales", "revenue", "amount"))), None)
     if numerator and denominator and numerator != denominator:
         return numerator, denominator
-    return names[1], names[0]
+    return None
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert query values to JSON-safe native types."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except (TypeError, ValueError):
+            pass
+    return str(value)
 
 
 def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]) -> dict[str, Any]:
@@ -220,6 +258,8 @@ def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]
         policy = inspect_sql_policy(f"SELECT {expression} AS metric_value FROM data")
         max_missing_pct = max((missing_by_column.get(name, 0.0) for name in referenced_columns), default=0.0)
         issues = []
+        if metric.get("status") != "approved":
+            issues.append("Metric is not approved.")
         if missing_columns:
             issues.append(f"Missing referenced columns: {', '.join(missing_columns)}")
         if not policy.is_safe:
@@ -861,9 +901,26 @@ def _render_markdown(
 def generate_report(db: Session, project_id: str, dataset: Dataset, title: str | None = None) -> AnalysisReport:
     load_dataset(project_id, dataset.file_path, dataset.source_type)
     schema = _schema(dataset)
-    numeric = _business_numeric_columns(schema)
-    dimensions = _business_dimensions(schema)
-    semantic = list_semantic_layer(db, project_id, dataset.id)
+    full_semantic = list_semantic_layer(db, project_id, dataset.id)
+    semantic = {
+        "metrics": [item for item in full_semantic["metrics"] if item.get("status") == "approved"],
+        "dimensions": [item for item in full_semantic["dimensions"] if item.get("status") == "approved"],
+    }
+    approved_metric_columns = {
+        column
+        for metric in semantic["metrics"]
+        for column in re.findall(r'"([^"]+)"', str(metric.get("expression") or ""))
+    }
+    approved_dimension_columns = {str(item.get("column")) for item in semantic["dimensions"]}
+    numeric = [
+        column for column in schema
+        if str(column.get("name")) in approved_metric_columns
+        and _is_numeric(str(column.get("type", "")))
+    ]
+    dimensions = [
+        column for column in schema
+        if str(column.get("name")) in approved_dimension_columns
+    ]
     memory = _recent_memory(db, project_id)
 
     report_title = title or f"{dataset.name} Insight Report"
@@ -984,7 +1041,14 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         "metric_contracts": metric_contracts,
         "blocks": blocks,
         "markdown": markdown,
+        "governance": {
+            "status": "governed" if semantic["metrics"] else "needs_metric_approval",
+            "message": "Only approved semantic definitions are included in this report snapshot.",
+        },
     }
+    content = _json_safe(content)
+    semantic = _json_safe(semantic)
+    memory = _json_safe(memory)
     report = AnalysisReport(
         project_id=project_id,
         dataset_id=dataset.id,

@@ -2,6 +2,31 @@
 import json
 
 
+def _upload_rows(client, auth_headers, project_id, name, values):
+    body = "value\n" + "\n".join(str(value) for value in values) + "\n"
+    response = client.post(
+        f"/api/datasets/upload?project_id={project_id}",
+        files={"file": (name, body.encode(), "text/csv")},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["id"]
+
+
+def _stream_events(client, auth_headers, workflow_id):
+    # sse-starlette 2.x keeps its shutdown event globally; TestClient creates a
+    # fresh loop for each request.
+    from sse_starlette.sse import AppStatus
+    AppStatus.should_exit_event = None
+    events = []
+    with client.stream("POST", f"/api/workflows/{workflow_id}/run", headers=auth_headers) as response:
+        for line in response.iter_lines():
+            decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+            if decoded.startswith("data: "):
+                events.append(json.loads(decoded[6:]))
+    return events
+
+
 def test_empty_workflow_cannot_run(client, auth_headers, project_id):
     resp = client.post("/api/workflows", json={
         "project_id": project_id,
@@ -121,3 +146,75 @@ def test_workflow_lifecycle(client, auth_headers, project_id):
     # Verify gone
     resp = client.get(f"/api/workflows/detail/{wf_id}", headers=auth_headers)
     assert resp.status_code == 404
+
+
+def test_workflow_sql_is_deterministically_bound_to_dataset(client, auth_headers, project_id):
+    first_id = _upload_rows(client, auth_headers, project_id, "same.csv", [1, 2])
+    _upload_rows(client, auth_headers, project_id, "same.csv", [1, 2, 3, 4])
+    created = client.post("/api/workflows", json={
+        "project_id": project_id,
+        "name": "Bound workflow",
+        "inputs": {"dataset_ids": [first_id]},
+        "steps": [{"type": "sql", "config": {"sql_template": "SELECT COUNT(*) AS count FROM data"}}],
+    }, headers=auth_headers)
+    workflow_id = created.json()["id"]
+
+    first_events = _stream_events(client, auth_headers, workflow_id)
+    first_result = next(event["result"] for event in first_events if event["event"] == "step_done")
+    assert first_result["rows"] == [[2]]
+
+    detail = client.get(f"/api/workflows/detail/{workflow_id}", headers=auth_headers).json()
+    assert detail["status"] == "active"
+    assert detail["last_run_at"] is not None
+
+
+def test_workflow_skill_step_does_not_fake_success(client, auth_headers, project_id):
+    dataset_id = _upload_rows(client, auth_headers, project_id, "skill.csv", [1])
+    created = client.post("/api/workflows", json={
+        "project_id": project_id,
+        "name": "Missing skill workflow",
+        "inputs": {"dataset_ids": [dataset_id]},
+        "steps": [{"type": "skill", "config": {"skill_name": "does-not-exist"}}],
+    }, headers=auth_headers)
+
+    events = _stream_events(client, auth_headers, created.json()["id"])
+    assert events[-1]["event"] == "workflow_done"
+    assert events[-1]["status"] == "partial"
+    assert "not found" in events[-1]["error"]
+
+    runs = client.get(f"/api/runs/{project_id}", headers=auth_headers).json()
+    detail = client.get(f"/api/runs/detail/{runs[0]['id']}", headers=auth_headers).json()
+    assert detail["status"] == "failed"
+    assert detail["steps"][0]["error"]
+
+
+def test_workflow_skill_step_executes_real_skill(
+    client, auth_headers, project_id, monkeypatch
+):
+    dataset_id = _upload_rows(client, auth_headers, project_id, "skill-real.csv", [1, 2, 3])
+    installed = client.post("/api/skills/install", json={
+        "name": "row-count-skill",
+        "title": "Row Count Skill",
+        "definition": {
+            "name": "row-count-skill",
+            "type": "analysis",
+            "steps": [{"type": "sql", "prompt": "Count rows"}],
+        },
+    }, headers=auth_headers)
+    assert installed.status_code == 200, installed.text
+
+    async def fake_achat(_messages):
+        return "```sql\nSELECT COUNT(*) AS count FROM data\n```"
+
+    monkeypatch.setattr("skills.executor.achat", fake_achat)
+    workflow = client.post("/api/workflows", json={
+        "project_id": project_id,
+        "name": "Real skill workflow",
+        "inputs": {"dataset_ids": [dataset_id]},
+        "steps": [{"type": "skill", "config": {"skill_name": "row-count-skill"}}],
+    }, headers=auth_headers)
+
+    events = _stream_events(client, auth_headers, workflow.json()["id"])
+    sql_event = next(event for event in events if event.get("event") == "skill_progress" and event.get("type") == "sql" and event.get("result"))
+    assert sql_event["result"]["rows"] == [[3]]
+    assert events[-1]["status"] == "complete"

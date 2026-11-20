@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Popconfirm, message } from "antd";
+import { Alert, Button, Popconfirm, Select, message } from "antd";
 import { PlusOutlined, CaretRightOutlined, DeleteOutlined, BranchesOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
@@ -14,6 +14,8 @@ interface Cell {
 
 export default function NotebookPage({ projectId }: { projectId: string }) {
   const [notebookId, setNotebookId] = useState<string | null>(null);
+  const [datasetId, setDatasetId] = useState<string | null>(null);
+  const [datasets, setDatasets] = useState<{ id: string; name: string; row_count: number }[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
   const [sqlResults, setSqlResults] = useState<Record<string, any>>({});
   const [pythonResults, setPythonResults] = useState<Record<string, any>>({});
@@ -22,6 +24,9 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
+      setDatasets(Array.isArray(data) ? data : []);
+    });
     api.get(`/api/notebooks/project/${projectId}`).then(({ data }) => {
       if (data.length > 0) {
         loadNotebook(data[0].id);
@@ -32,11 +37,12 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   const loadNotebook = async (id: string) => {
     const { data } = await api.get(`/api/notebooks/${id}`);
     setNotebookId(id);
+    setDatasetId(data.dataset_id || null);
     setCells(data.cells);
   };
 
   const createNotebook = async () => {
-    const { data } = await api.post("/api/notebooks/", { project_id: projectId });
+    const { data } = await api.post("/api/notebooks/", { project_id: projectId, dataset_id: datasetId });
     loadNotebook(data.id);
   };
 
@@ -71,12 +77,8 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   const runSql = async (cellId: string, sql: string) => {
     setLoading((p) => ({ ...p, [cellId]: true }));
     try {
-      const datasets = await api.get(`/api/datasets?project_id=${projectId}`);
-      if ((datasets.data as any[]).length === 0) {
-        message.error("未找到数据集，请先接入数据");
-        return;
-      }
-      const { data } = await api.post(`/api/datasets/by-id/${(datasets.data as any[])[0].id}/query`, { sql });
+      await updateCell(cellId, sql);
+      const { data } = await api.post(`/api/notebooks/cells/${cellId}/execute`);
       setSqlResults((p) => ({ ...p, [cellId]: data }));
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
@@ -91,8 +93,10 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   const runPython = async (cellId: string, code: string) => {
     setLoading((p) => ({ ...p, [cellId]: true }));
     try {
-      const { data } = await api.post(`/api/notebooks/cells/${cellId}/execute`, { code });
+      await updateCell(cellId, code);
+      const { data } = await api.post(`/api/notebooks/cells/${cellId}/execute`);
       setPythonResults((p) => ({ ...p, [cellId]: data }));
+      if (data.error) message.error(data.error);
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
@@ -119,6 +123,18 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   return (
     <div style={{ padding: "12px 0" }}>
       <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+        <Select
+          value={datasetId}
+          placeholder="选择分析数据集"
+          style={{ minWidth: 260 }}
+          options={datasets.map((dataset) => ({ value: dataset.id, label: `${dataset.name}（${dataset.row_count.toLocaleString()} 行）` }))}
+          onChange={async (value) => {
+            setDatasetId(value);
+            if (notebookId) await api.put(`/api/notebooks/${notebookId}`, { dataset_id: value });
+            setSqlResults({});
+            setPythonResults({});
+          }}
+        />
         <Button size="small" onClick={() => addCell("markdown")} icon={<PlusOutlined />}>Markdown</Button>
         <Button size="small" onClick={() => addCell("sql")} icon={<PlusOutlined />}>SQL</Button>
         <Button size="small" onClick={() => addCell("python")} icon={<PlusOutlined />}>Python</Button>
@@ -126,16 +142,30 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
           <Button size="small" icon={<BranchesOutlined />} style={{ marginLeft: "auto" }}
             onClick={async () => {
               try {
+                if (!datasetId) {
+                  message.warning("请先选择数据集");
+                  return;
+                }
+                const sqlCells = cells.filter((cell) => cell.cell_type === "sql" && cell.content.trim());
+                if (!sqlCells.length) {
+                  message.warning("没有可转换的 SQL 单元格");
+                  return;
+                }
+                if (cells.some((cell) => cell.cell_type === "python" && cell.content.trim())) {
+                  message.warning("Python 单元格不能无损转换为工作流，请先移除或改写为 SQL");
+                  return;
+                }
                 const wf = await api.post("/api/workflows", {
                   name: "由分析笔记转换",
                   project_id: projectId,
+                  inputs: { dataset_ids: [datasetId] },
+                  steps: sqlCells.map((cell, index) => ({
+                    type: "sql",
+                    sort_order: index,
+                    config: { sql_template: cell.content },
+                    description: "来自分析笔记",
+                  })),
                 });
-                const steps = cells.map((c, i) => {
-                  if (c.cell_type === "sql") return { type: "sql", sort_order: i, config: { sql_template: c.content }, description: "来自分析笔记" };
-                  if (c.cell_type === "python") return { type: "analyze", sort_order: i, config: { prompt: c.content }, description: "Python 单元格" };
-                  return { type: "insight", sort_order: i, config: { prompt: c.content }, description: "Markdown 分析" };
-                });
-                await api.put(`/api/workflows/${wf.data.id}`, { steps });
                 message.success("已转换为工作流");
                 navigate(`/project/${projectId}/workflow/${wf.data.id}`);
               } catch { message.error("转换失败，请稍后重试"); }
@@ -143,6 +173,16 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
           >保存为工作流</Button>
         )}
       </div>
+
+      {!datasetId && (
+        <Alert
+          type="warning"
+          showIcon
+          message="请选择数据集后再运行单元格"
+          description="SQL 中的 data 表和 Python 中的 columns、rows 都会固定来自这里选择的数据集。"
+          style={{ marginBottom: 12 }}
+        />
+      )}
 
       {cells.map((cell) => {
         const isEditing = editing[cell.id] !== false; // default: editing=true for new cells
@@ -175,6 +215,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                     icon={<CaretRightOutlined />}
                     onClick={() => runSql(cell.id, cell.content)}
                     loading={loading[cell.id]}
+                    disabled={!datasetId}
                   >
                     运行
                   </Button>
@@ -185,6 +226,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                     icon={<CaretRightOutlined />}
                     onClick={() => runPython(cell.id, cell.content)}
                     loading={loading[cell.id]}
+                    disabled={!datasetId}
                   >
                     运行
                   </Button>
@@ -278,8 +320,10 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                   overflow: "auto",
                   maxHeight: 300,
                 }}>
-                  {typeof pythonResults[cell.id].output === "string"
-                    ? pythonResults[cell.id].output
+                  {pythonResults[cell.id].error
+                    ? pythonResults[cell.id].error
+                    : typeof pythonResults[cell.id].output === "string"
+                    ? pythonResults[cell.id].output || "运行完成，无输出"
                     : JSON.stringify(pythonResults[cell.id], null, 2)}
                 </pre>
               </div>

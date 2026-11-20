@@ -1,10 +1,14 @@
 """Notebook API."""
+import json
+import subprocess
+import sys
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User
-from models.project import Project, Notebook, Cell
+from models.project import Project, Dataset, Notebook, Cell
 from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/notebooks", tags=["notebooks"])
@@ -18,6 +22,7 @@ class CellCreate(BaseModel):
 
 class NotebookCreate(BaseModel):
     project_id: str
+    dataset_id: str | None = None
     cells: list[CellCreate] | None = None
     name: str = "Untitled"
 
@@ -34,7 +39,12 @@ def create_notebook(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    nb = Notebook(project_id=req.project_id, name=req.name)
+    if req.dataset_id and not db.query(Dataset).filter(
+        Dataset.id == req.dataset_id, Dataset.project_id == req.project_id
+    ).first():
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    nb = Notebook(project_id=req.project_id, dataset_id=req.dataset_id, name=req.name)
     db.add(nb)
     db.flush()
 
@@ -60,7 +70,7 @@ def list_notebooks(
         raise HTTPException(status_code=404, detail="Project not found")
 
     notebooks = db.query(Notebook).filter(Notebook.project_id == project_id).all()
-    return [{"id": n.id, "name": n.name, "created_at": n.created_at.isoformat()} for n in notebooks]
+    return [{"id": n.id, "name": n.name, "dataset_id": n.dataset_id, "created_at": n.created_at.isoformat()} for n in notebooks]
 
 
 @router.get("/{notebook_id}")
@@ -83,6 +93,7 @@ def get_notebook(
     return {
         "id": nb.id,
         "name": nb.name,
+        "dataset_id": nb.dataset_id,
         "cells": [
             {"id": c.id, "cell_type": c.cell_type, "content": c.content, "sort_order": c.sort_order}
             for c in cells
@@ -93,6 +104,33 @@ def get_notebook(
 class CellUpdate(BaseModel):
     cell_type: str | None = None
     content: str | None = None
+
+
+class NotebookUpdate(BaseModel):
+    name: str | None = None
+    dataset_id: str | None = None
+
+
+@router.put("/{notebook_id}")
+def update_notebook(
+    notebook_id: str,
+    req: NotebookUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notebook = _get_owned_notebook(db, notebook_id, current_user.id)
+    if req.dataset_id is not None:
+        dataset = db.query(Dataset).filter(
+            Dataset.id == req.dataset_id,
+            Dataset.project_id == notebook.project_id,
+        ).first()
+        if not dataset:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        notebook.dataset_id = req.dataset_id
+    if req.name is not None:
+        notebook.name = req.name
+    db.commit()
+    return {"id": notebook.id, "name": notebook.name, "dataset_id": notebook.dataset_id}
 
 
 def _get_owned_notebook(db: Session, notebook_id: str, user_id: str) -> Notebook:
@@ -152,39 +190,78 @@ def delete_cell(cell_id: str, current_user: User = Depends(get_current_user), db
     return {"ok": True}
 
 
+_PYTHON_RUNNER = r'''
+import json, sys
+payload = json.loads(sys.stdin.read())
+safe_builtins = {
+    "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict,
+    "enumerate": enumerate, "filter": filter, "float": float, "int": int,
+    "len": len, "list": list, "map": map, "max": max, "min": min,
+    "print": print, "range": range, "round": round, "set": set,
+    "sorted": sorted, "str": str, "sum": sum, "tuple": tuple, "zip": zip,
+    "Exception": Exception, "ValueError": ValueError, "TypeError": TypeError,
+}
+scope = {"__builtins__": safe_builtins, "columns": payload["columns"], "rows": payload["rows"]}
+exec(payload["code"], scope, scope)
+'''
+
+
 @router.post("/cells/{cell_id}/execute")
-def execute_python_cell(
+def execute_cell(
     cell_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Execute a Python cell in a restricted sandbox."""
+    """Execute a SQL or Python cell against the notebook's bound dataset."""
     cell = _get_owned_cell(db, cell_id, current_user.id)
+    notebook = cell.notebook
+    if not notebook.dataset_id:
+        raise HTTPException(status_code=400, detail="Choose a dataset for this notebook before running cells")
+    dataset = db.query(Dataset).filter(
+        Dataset.id == notebook.dataset_id,
+        Dataset.project_id == notebook.project_id,
+    ).first()
+    if not dataset or not dataset.file_path:
+        raise HTTPException(status_code=400, detail="Notebook dataset is not available")
+    if dataset.source_type == "mysql":
+        raise HTTPException(status_code=400, detail="MySQL notebook execution is not connected yet; use direct SQL from the data page")
+
+    from services.dataset_tables import bind_default_table, dataset_table_name
+    from services.sql_policy import QUERY_TIMEOUT_SEC, validate_sql
+    from tools import get_engine, load_dataset
+
+    table_name = dataset_table_name(dataset.id)
+    load_dataset(notebook.project_id, dataset.file_path, dataset.source_type, table_name=table_name)
+    engine = get_engine(notebook.project_id)
+
+    if cell.cell_type == "sql":
+        is_safe, sql_or_error = validate_sql(cell.content)
+        if not is_safe:
+            raise HTTPException(status_code=400, detail=sql_or_error)
+        try:
+            return engine.query(
+                bind_default_table(sql_or_error, dataset.id),
+                timeout_sec=QUERY_TIMEOUT_SEC,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Query error: {str(exc)}") from exc
+
     if cell.cell_type != "python":
-        raise HTTPException(status_code=400, detail="Only Python cells can be executed")
+        raise HTTPException(status_code=400, detail="Only SQL and Python cells can be executed")
 
-    # Restricted builtins — only safe operations
-    safe_builtins = {
-        "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict,
-        "enumerate": enumerate, "filter": filter, "float": float,
-        "int": int, "len": len, "list": list, "map": map, "max": max,
-        "min": min, "print": print, "range": range, "round": round,
-        "set": set, "sorted": sorted, "str": str, "sum": sum, "tuple": tuple,
-        "zip": zip, "True": True, "False": False, "None": None,
-        "Exception": Exception, "ValueError": ValueError, "TypeError": TypeError,
-    }
-
-    import sys, io
-    old_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    result = None
-    error = None
+    preview = engine.preview(table_name=table_name, limit=1000)
+    payload = json.dumps({"code": cell.content, "columns": preview.columns, "rows": preview.rows}, default=str)
     try:
-        exec(cell.content, {"__builtins__": safe_builtins})
-        result = sys.stdout.getvalue()
-    except Exception as e:
-        error = str(e)
-    finally:
-        sys.stdout = old_stdout
-
-    return {"output": result, "error": error}
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", _PYTHON_RUNNER],
+            input=payload,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=408, detail="Python cell exceeded the 5 second execution limit") from exc
+    output = completed.stdout[:100_000]
+    error = completed.stderr.strip()[:4_000] if completed.returncode else None
+    return {"output": output, "error": error, "dataset_id": dataset.id, "sample_rows": len(preview.rows)}

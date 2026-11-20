@@ -18,10 +18,23 @@ def ensure_sqlite_dev_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     with engine.begin() as conn:
+        if "users" in tables:
+            user_columns = {col["name"] for col in inspector.get_columns("users")}
+            if "is_admin" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+                first_user_id = conn.execute(text("SELECT id FROM users ORDER BY created_at ASC LIMIT 1")).scalar()
+                if first_user_id:
+                    conn.execute(text("UPDATE users SET is_admin = 1 WHERE id = :user_id"), {"user_id": first_user_id})
+
         if "runs" in tables:
             run_columns = {col["name"] for col in inspector.get_columns("runs")}
             if "lineage" not in run_columns:
                 conn.execute(text("ALTER TABLE runs ADD COLUMN lineage JSON"))
+
+        if "notebooks" in tables:
+            notebook_columns = {col["name"] for col in inspector.get_columns("notebooks")}
+            if "dataset_id" not in notebook_columns:
+                conn.execute(text("ALTER TABLE notebooks ADD COLUMN dataset_id VARCHAR(32)"))
 
         if "semantic_metrics" not in tables:
             conn.execute(text("""

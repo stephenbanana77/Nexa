@@ -13,6 +13,7 @@ interface WorkflowItem {
   version: number;
   step_count: number;
   inputs?: {
+    dataset_ids?: string[];
     task?: {
       cadence?: string;
       compare_previous?: boolean;
@@ -30,9 +31,9 @@ const stepLabels: Record<string, string> = {
 
 const cadenceLabels: Record<string, string> = {
   manual: "按需运行",
-  on_new_data: "数据变化时",
-  weekly: "每周",
-  monthly: "每月",
+  on_new_data: "数据变化时（调度未接入）",
+  weekly: "每周（调度未接入）",
+  monthly: "每月（调度未接入）",
 };
 
 const humanizeRunError = (detail: unknown) => {
@@ -95,6 +96,11 @@ export default function WorkflowPage() {
     const workflow = workflows.find((item) => item.id === id);
     if (!workflow?.step_count) {
       message.warning("请先配置至少一个运行步骤");
+      navigate(`/project/${projectId}/workflow/${id}`);
+      return;
+    }
+    if (!workflow.inputs?.dataset_ids?.length) {
+      message.warning("请先绑定并保存运行数据集");
       navigate(`/project/${projectId}/workflow/${id}`);
       return;
     }
@@ -166,7 +172,7 @@ export default function WorkflowPage() {
         <div>
           <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>自动化</h2>
           <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, margin: "4px 0 0" }}>
-            新数据到达时，重复执行已经验证过的分析路径
+            手动重复执行已经验证过的分析路径；定时与新数据触发尚未接入调度器
           </p>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModal(true)}>
@@ -197,10 +203,10 @@ export default function WorkflowPage() {
                     <span>{wf.last_run_at ? `上次运行：${new Date(wf.last_run_at).toLocaleString("zh-CN")}` : "尚未运行"}</span>
                   </div>
                 </div>
-                <Tag color={!wf.step_count ? "#d29922" : wf.status === "active" ? "#2563EB" : wf.status === "draft" ? "#d29922" : "#666"}>
-                  {!wf.step_count ? "未配置" : wf.status === "active" ? "已启用" : wf.status === "draft" ? "草稿" : wf.status}
+                <Tag color={!wf.step_count || !wf.inputs?.dataset_ids?.length ? "#d29922" : wf.status === "active" ? "#2563EB" : wf.status === "draft" ? "#d29922" : "#666"}>
+                  {!wf.step_count ? "未配置" : !wf.inputs?.dataset_ids?.length ? "未绑定数据" : wf.status === "active" ? "已启用" : wf.status === "draft" ? "草稿" : wf.status}
                 </Tag>
-                {wf.step_count > 0 ? (
+                {wf.step_count > 0 && wf.inputs?.dataset_ids?.length ? (
                   <>
                     <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>运行</Button>
                     <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} aria-label="编辑自动化" title="编辑自动化" />

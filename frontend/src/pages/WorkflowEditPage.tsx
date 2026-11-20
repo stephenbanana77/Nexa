@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Alert, Button, Input, Spin, Card, Tag, message, Popconfirm, Tooltip } from "antd";
+import { Alert, Button, Input, Spin, Card, Tag, message, Popconfirm, Select, Tooltip } from "antd";
 import { SaveOutlined, PlayCircleOutlined, ArrowLeftOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { api } from "../services";
 import { tokens } from "../theme";
@@ -21,7 +21,14 @@ interface Workflow {
   description: string;
   project_id: string;
   status: string;
+  inputs?: { dataset_ids?: string[] };
   steps: Step[];
+}
+
+interface DatasetOption {
+  id: string;
+  name: string;
+  row_count: number;
 }
 
 const stepTypeOptions = [
@@ -42,10 +49,13 @@ export default function WorkflowEditPage() {
   const [name, setName] = useState("");
   const [description, setDesc] = useState("");
   const [steps, setSteps] = useState<Step[]>([]);
-  const [initialState, setInitialState] = useState<{ name: string; desc: string; stepsJson: string } | null>(null);
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
+  const [datasetIds, setDatasetIds] = useState<string[]>([]);
+  const [initialState, setInitialState] = useState<{ name: string; desc: string; stepsJson: string; datasetsJson: string } | null>(null);
 
   const isDirty = initialState
     ? name !== initialState.name || description !== initialState.desc || JSON.stringify(steps) !== initialState.stepsJson
+      || JSON.stringify(datasetIds) !== initialState.datasetsJson
     : false;
 
   useEffect(() => {
@@ -56,11 +66,25 @@ export default function WorkflowEditPage() {
         setName(data.name);
         setDesc(data.description || "");
         setSteps(data.steps || []);
-        setInitialState({ name: data.name, desc: data.description || "", stepsJson: JSON.stringify(data.steps || []) });
+        const boundDatasets = data.inputs?.dataset_ids || [];
+        setDatasetIds(boundDatasets);
+        setInitialState({
+          name: data.name,
+          desc: data.description || "",
+          stepsJson: JSON.stringify(data.steps || []),
+          datasetsJson: JSON.stringify(boundDatasets),
+        });
       })
       .catch(() => message.error("工作流加载失败，请稍后重试"))
       .finally(() => setLoading(false));
   }, [workflowId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    api.get(`/api/datasets?project_id=${projectId}`)
+      .then(({ data }) => setDatasets(Array.isArray(data) ? data : []))
+      .catch(() => message.error("数据集列表加载失败"));
+  }, [projectId]);
 
   const addStep = (type: string) => {
     const defaults: Record<string, any> = {
@@ -92,9 +116,15 @@ export default function WorkflowEditPage() {
     try {
       await api.put(`/api/workflows/${workflowId}`, {
         name, description,
+        inputs: { dataset_ids: datasetIds },
         steps: steps.map((s, i) => ({ ...s, sort_order: i })),
       });
-      setInitialState({ name, desc: description, stepsJson: JSON.stringify(steps) });
+      setInitialState({
+        name,
+        desc: description,
+        stepsJson: JSON.stringify(steps),
+        datasetsJson: JSON.stringify(datasetIds),
+      });
       message.success("工作流已保存");
     } catch {
       message.error("保存失败，请稍后重试");
@@ -107,6 +137,10 @@ export default function WorkflowEditPage() {
     if (!workflowId) return;
     if (steps.length === 0) {
       message.warning("请先添加并保存至少一个运行步骤");
+      return;
+    }
+    if (datasetIds.length === 0) {
+      message.warning("请先选择并保存这个自动化使用的数据集");
       return;
     }
     if (isDirty) {
@@ -177,9 +211,9 @@ export default function WorkflowEditPage() {
           placeholder="工作流名称"
         />
         <div style={{ display: "flex", gap: 8 }}>
-          <Tooltip title={steps.length === 0 ? "请先添加并保存至少一个步骤" : isDirty ? "请先保存流程修改" : "运行自动化"}>
+          <Tooltip title={steps.length === 0 ? "请先添加并保存至少一个步骤" : datasetIds.length === 0 ? "请先选择数据集" : isDirty ? "请先保存流程修改" : "运行自动化"}>
             <span>
-              <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running} disabled={steps.length === 0 || isDirty}>运行</Button>
+              <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running} disabled={steps.length === 0 || datasetIds.length === 0 || isDirty}>运行</Button>
             </span>
           </Tooltip>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}
@@ -195,6 +229,21 @@ export default function WorkflowEditPage() {
         autoSize
       />
 
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: tokens.color.text.tertiary, marginBottom: 6 }}>运行数据集</div>
+        <Select
+          mode="multiple"
+          value={datasetIds}
+          onChange={setDatasetIds}
+          placeholder="选择这个自动化固定使用的数据集"
+          style={{ width: "100%" }}
+          options={datasets.map((dataset) => ({
+            value: dataset.id,
+            label: `${dataset.name}（${dataset.row_count.toLocaleString()} 行）`,
+          }))}
+        />
+      </div>
+
       <Tag color={workflow.status === "draft" ? "default" : "blue"}>{workflow.status === "draft" ? "草稿" : workflow.status === "active" ? "已启用" : workflow.status}</Tag>
 
       {steps.length === 0 && (
@@ -203,6 +252,15 @@ export default function WorkflowEditPage() {
           showIcon
           message="这个自动化还不能运行"
           description="请添加至少一个步骤并保存。通常从 SQL 查询开始，再添加分析、洞察或可视化步骤。"
+          style={{ marginTop: 16 }}
+        />
+      )}
+      {steps.length > 0 && datasetIds.length === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message="还没有绑定数据集"
+          description="自动化不会再使用项目里最后打开的数据。请选择固定数据集并保存后再运行。"
           style={{ marginTop: 16 }}
         />
       )}

@@ -6,7 +6,7 @@ from agents.tools import execute_query, suggest_chart
 from agents.context import get_schema_context
 from database import SessionLocal
 from models.project import Dataset
-from services.dataset_tables import dataset_table_name
+from services.dataset_tables import bind_default_table, dataset_table_name
 from tools import load_dataset
 from utils.config import settings
 
@@ -21,6 +21,9 @@ async def execute_skill(
     params = params or {}
     definition = skill.get("definition", {})
     steps = definition.get("steps", [])
+    if not steps:
+        yield {"event": "skill_failed", "message": "Skill has no executable steps"}
+        return
     dataset_id = params.get("dataset_id")
     if dataset_id:
         db = SessionLocal()
@@ -125,6 +128,9 @@ Respond with ONLY the SQL query in a markdown code block. No explanation."""
     import re
     sql_match = re.search(r"```sql\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     sql = sql_match.group(1).strip() if sql_match else response.strip()
+    dataset_id = context.get("params", {}).get("dataset_id")
+    if dataset_id:
+        sql = bind_default_table(sql, dataset_id)
 
     result = await asyncio.to_thread(execute_query, context["project_id"], sql)
     return {"sql": sql, "columns": result["columns"], "rows": result["rows"], "row_count": result["row_count"]}

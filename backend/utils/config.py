@@ -53,6 +53,9 @@ class Settings:
     MOONSHOT_API_KEY: str = os.getenv("MOONSHOT_API_KEY", "")
     MOONSHOT_BASE_URL: str = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
     MOONSHOT_MODEL: str = os.getenv("MOONSHOT_MODEL", "kimi-k3")
+    CUSTOM_API_KEY: str = os.getenv("CUSTOM_API_KEY", "")
+    CUSTOM_BASE_URL: str = os.getenv("CUSTOM_BASE_URL", "")
+    CUSTOM_MODEL: str = os.getenv("CUSTOM_MODEL", "")
 
     @property
     def LLM_API_KEY(self) -> str:
@@ -60,6 +63,8 @@ class Settings:
             return os.getenv("LLM_API_KEY", "")
         if self.LLM_PROVIDER == "moonshot":
             return self.MOONSHOT_API_KEY
+        if self.LLM_PROVIDER == "custom":
+            return self.CUSTOM_API_KEY
         return self.DEEPSEEK_API_KEY
 
     @property
@@ -68,6 +73,8 @@ class Settings:
             return os.getenv("LLM_BASE_URL", "")
         if self.LLM_PROVIDER == "moonshot":
             return self.MOONSHOT_BASE_URL
+        if self.LLM_PROVIDER == "custom":
+            return self.CUSTOM_BASE_URL
         return self.DEEPSEEK_BASE_URL
 
     @property
@@ -76,6 +83,8 @@ class Settings:
             return os.getenv("LLM_MODEL", "")
         if self.LLM_PROVIDER == "moonshot":
             return self.MOONSHOT_MODEL
+        if self.LLM_PROVIDER == "custom":
+            return self.CUSTOM_MODEL
         return self.DEEPSEEK_MODEL
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "4096"))

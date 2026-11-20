@@ -1,6 +1,9 @@
 """Semantic layer and Insight Report tests."""
 from pathlib import Path
 
+from database.session import SessionLocal
+from services.semantic_layer import semantic_context_text
+
 
 def _upload_sales_dataset(client, project_id: str, auth_headers: dict) -> str:
     csv_path = Path("backend/test_storage/sales_fixture.csv")
@@ -20,6 +23,20 @@ def _upload_sales_dataset(client, project_id: str, auth_headers: dict) -> str:
         )
     assert resp.status_code == 200, resp.text
     return resp.json()["id"]
+
+
+def _approve_sales_governance(client, project_id: str, dataset_id: str, auth_headers: dict) -> None:
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    metric = next(item for item in layer["metrics"] if item["dataset_id"] == dataset_id and item["name"] == "Total Sales")
+    dimension = next(item for item in layer["dimensions"] if item["dataset_id"] == dataset_id and item["name"] == "Region")
+    assert client.patch(
+        f"/api/semantic/metrics/{metric['id']}/status",
+        json={"status": "approved"}, headers=auth_headers,
+    ).status_code == 200
+    assert client.patch(
+        f"/api/semantic/dimensions/{dimension['id']}/status",
+        json={"status": "approved"}, headers=auth_headers,
+    ).status_code == 200
 
 
 def test_semantic_layer_seed_and_crud(client, project_id, auth_headers):
@@ -52,6 +69,7 @@ def test_semantic_layer_seed_and_crud(client, project_id, auth_headers):
 
 def test_report_generation_creates_sql_evidence(client, project_id, auth_headers):
     dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    _approve_sales_governance(client, project_id, dataset_id, auth_headers)
 
     resp = client.post(
         "/api/reports",
@@ -93,6 +111,7 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
 
 def test_auto_investigation_creates_actionable_cards(client, project_id, auth_headers):
     dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    _approve_sales_governance(client, project_id, dataset_id, auth_headers)
 
     resp = client.post(
         "/api/reports/investigate",
@@ -151,6 +170,53 @@ def test_notebook_cells_require_project_ownership(client, project_id, auth_heade
     assert client.post(f"/api/notebooks/cells/{cell_id}/execute", headers=other_headers).status_code == 404
 
 
+def test_notebook_sql_and_python_use_bound_dataset(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    notebook = client.post(
+        "/api/notebooks/",
+        json={
+            "project_id": project_id,
+            "dataset_id": dataset_id,
+            "name": "Bound notebook",
+            "cells": [
+                {"cell_type": "sql", "content": "SELECT COUNT(*) AS count FROM data"},
+                {"cell_type": "python", "content": "print(columns)\nprint(len(rows))", "sort_order": 1},
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert notebook.status_code == 200, notebook.text
+    detail = client.get(f"/api/notebooks/{notebook.json()['id']}", headers=auth_headers).json()
+    assert detail["dataset_id"] == dataset_id
+
+    sql_result = client.post(f"/api/notebooks/cells/{detail['cells'][0]['id']}/execute", headers=auth_headers)
+    assert sql_result.status_code == 200, sql_result.text
+    assert sql_result.json()["rows"] == [[3]]
+
+    python_result = client.post(f"/api/notebooks/cells/{detail['cells'][1]['id']}/execute", headers=auth_headers)
+    assert python_result.status_code == 200, python_result.text
+    assert "Region" in python_result.json()["output"]
+    assert python_result.json()["output"].strip().endswith("3")
+
+
+def test_notebook_python_timeout_does_not_block_worker(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    notebook = client.post(
+        "/api/notebooks/",
+        json={
+            "project_id": project_id,
+            "dataset_id": dataset_id,
+            "cells": [{"cell_type": "python", "content": "while True: pass"}],
+        },
+        headers=auth_headers,
+    ).json()
+    cell_id = client.get(f"/api/notebooks/{notebook['id']}", headers=auth_headers).json()["cells"][0]["id"]
+
+    timed_out = client.post(f"/api/notebooks/cells/{cell_id}/execute", headers=auth_headers)
+    assert timed_out.status_code == 408
+    assert "5 second" in timed_out.json()["detail"]
+
+
 def test_readiness_probe_works_with_sqlalchemy_2(client):
     response = client.get("/api/health/ready")
     assert response.status_code == 200, response.text
@@ -173,7 +239,7 @@ def test_quality_and_report_publication_gates(client, project_id, auth_headers):
 
     blocked = client.post(f"/api/reports/{report['id']}/publish", headers=auth_headers)
     assert blocked.status_code == 400
-    assert "Approve at least one metric" in blocked.json()["detail"]
+    assert "no approved metric" in blocked.json()["detail"]
 
     layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
     metric_id = next(metric["id"] for metric in layer["metrics"] if metric["dataset_id"] == dataset_id)
@@ -185,7 +251,78 @@ def test_quality_and_report_publication_gates(client, project_id, auth_headers):
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
 
-    published = client.post(f"/api/reports/{report['id']}/publish", headers=auth_headers)
+    governed_report = client.post(
+        "/api/reports",
+        json={"project_id": project_id, "dataset_id": dataset_id},
+        headers=auth_headers,
+    ).json()
+    published = client.post(f"/api/reports/{governed_report['id']}/publish", headers=auth_headers)
     assert published.status_code == 200, published.text
     assert published.json()["status"] == "published"
     assert published.json()["published_at"]
+
+
+def test_agent_semantic_context_only_contains_approved_definitions(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    sales_metric = next(metric for metric in layer["metrics"] if metric["dataset_id"] == dataset_id and metric["name"] == "Total Sales")
+
+    with SessionLocal() as db:
+        assert "Total Sales" not in semantic_context_text(db, project_id, dataset_id)
+
+    approved = client.patch(
+        f"/api/semantic/metrics/{sales_metric['id']}/status",
+        json={"status": "approved"},
+        headers=auth_headers,
+    )
+    assert approved.status_code == 200, approved.text
+    with SessionLocal() as db:
+        context = semantic_context_text(db, project_id, dataset_id)
+    assert "Total Sales" in context
+    assert "Region maps" not in context
+
+
+def test_invalid_metric_cannot_be_approved(client, project_id, auth_headers):
+    dataset_id = _upload_sales_dataset(client, project_id, auth_headers)
+    created = client.post("/api/semantic/metrics", json={
+        "project_id": project_id,
+        "dataset_id": dataset_id,
+        "name": "Invalid metric",
+        "expression": 'SUM("Does Not Exist")',
+    }, headers=auth_headers)
+    assert created.status_code == 201
+
+    approved = client.patch(
+        f"/api/semantic/metrics/{created.json()['id']}/status",
+        json={"status": "approved"},
+        headers=auth_headers,
+    )
+    assert approved.status_code == 400
+    assert "missing columns" in approved.json()["detail"]
+
+
+def test_date_dataset_quality_and_report_are_json_safe(client, project_id, auth_headers):
+    uploaded = client.post(
+        f"/api/datasets/upload?project_id={project_id}",
+        files={"file": (
+            "daily.csv",
+            b"event_date,cnt\n2026-01-01,3\n2026-01-02,5\n",
+            "text/csv",
+        )},
+        headers=auth_headers,
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    dataset_id = uploaded.json()["id"]
+
+    quality = client.get(f"/api/datasets/by-id/{dataset_id}/quality", headers=auth_headers)
+    assert quality.status_code == 200, quality.text
+    schema_check = next(check for check in quality.json()["checks"] if check["name"] == "schema_drift")
+    assert schema_check["status"] == "pass"
+
+    report = client.post(
+        "/api/reports",
+        json={"project_id": project_id, "dataset_id": dataset_id},
+        headers=auth_headers,
+    )
+    assert report.status_code == 201, report.text
+    assert report.json()["content"]["blocks"]

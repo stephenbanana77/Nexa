@@ -95,6 +95,11 @@ async def chat_stream(
     datasets = dataset_query.filter(Dataset.id.in_(dataset_ids)).all()
     if not datasets:
         raise HTTPException(status_code=400, detail="No valid datasets found")
+    if any(dataset.source_type == "mysql" for dataset in datasets):
+        raise HTTPException(
+            status_code=400,
+            detail="MySQL currently supports preview and direct SQL only; import a snapshot before using the Agent",
+        )
 
     # Build a joined schema context from all selected datasets
     from tools import get_engine, load_dataset
@@ -240,3 +245,34 @@ def list_conversations(
         }
         for c in convs
     ]
+
+
+@router.get("/conversations/detail/{conversation_id}")
+def get_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = db.query(Conversation).join(Project).filter(
+        Conversation.id == conversation_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+    ).order_by(Message.created_at.asc()).all()
+    return {
+        "id": conversation.id,
+        "project_id": conversation.project_id,
+        "title": conversation.title,
+        "messages": [
+            {
+                "role": message.role,
+                "content": message.content,
+                **(message.metadata_ or {}),
+                "created_at": message.created_at.isoformat() if message.created_at else None,
+            }
+            for message in messages
+        ],
+    }
