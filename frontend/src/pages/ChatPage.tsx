@@ -473,7 +473,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
         <footer className="agent-composer">
           {datasets.length === 0 ? (
             <button className="connect-data-prompt" type="button" onClick={() => navigate(`/project/${projectId}?tab=data`)}>
-              <DatabaseOutlined /> 先接入数据，再分配任务 <ArrowRightOutlined />
+              <DatabaseOutlined /> 上传 CSV / Excel 即可开始分析 <ArrowRightOutlined />
             </button>
           ) : (
             <Select

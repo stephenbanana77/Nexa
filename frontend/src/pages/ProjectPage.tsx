@@ -7,6 +7,7 @@ import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import api from "../api/client";
 import MySQLConnectModal from "../components/MySQLConnectModal";
+import "./ProjectPage.css";
 
 const ChatPage = lazy(() => import("./ChatPage"));
 const InsightsPage = lazy(() => import("./InsightsPage"));
@@ -246,19 +247,44 @@ export default function ProjectPage() {
           { key: "chat", label: <span style={{ color: "#f08a67" }}>Agent</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ChatPage projectId={projectId!} /></Suspense></div> },
           { key: "data", label: <span>数据</span>,
-            children: <div style={{ padding: "24px 0", width: "100%" }}>
-              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-                <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
-                  <Button icon={<UploadOutlined />} loading={uploading} size="large">上传 CSV / Excel</Button>
-                </Upload>
-                <Button icon={<DatabaseOutlined />} size="large" onClick={() => setMysqlModalOpen(true)}>连接 MySQL</Button>
-                {selectedDatasetId && <Button icon={<SafetyCertificateOutlined />} loading={qualityLoading} onClick={() => runQualityCheck(selectedDatasetId)}>检查数据质量</Button>}
-                {selectedDatasetId && (
-                  <Popconfirm title="删除这个数据集？" description="原始上传文件也会删除，此操作不可撤销。" onConfirm={() => deleteDataset(selectedDatasetId)}>
-                    <Button danger icon={<DeleteOutlined />} aria-label="删除数据集" title="删除数据集" />
-                  </Popconfirm>
-                )}
-              </div>
+            children: <div className="data-workspace">
+              {datasets.length === 0 ? (
+                <section className="data-onboarding" aria-labelledby="data-onboarding-title">
+                  <div className="data-onboarding-primary">
+                    <div>
+                      <h2 id="data-onboarding-title">先上传一份数据</h2>
+                      <p>无需配置数据库。上传 CSV 或 Excel 后，就能直接交给 Agent 分析。</p>
+                    </div>
+                    <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
+                      <Button type="primary" icon={<UploadOutlined />} loading={uploading} size="large">
+                        上传 CSV / Excel
+                      </Button>
+                    </Upload>
+                  </div>
+                  <div className="data-onboarding-advanced">
+                    <div>
+                      <strong>已有团队数据库？</strong>
+                      <span>MySQL 是高级可选项，目前仅支持预览和直接 SQL。</span>
+                    </div>
+                    <Button icon={<DatabaseOutlined />} onClick={() => setMysqlModalOpen(true)}>
+                      连接 MySQL
+                    </Button>
+                  </div>
+                </section>
+              ) : (
+                <div className="data-toolbar">
+                  <Upload beforeUpload={handleUpload as any} showUploadList={false} accept=".csv,.xlsx,.xls">
+                    <Button icon={<UploadOutlined />} loading={uploading}>上传文件</Button>
+                  </Upload>
+                  <Button icon={<DatabaseOutlined />} onClick={() => setMysqlModalOpen(true)}>连接 MySQL</Button>
+                  {selectedDatasetId && <Button icon={<SafetyCertificateOutlined />} loading={qualityLoading} onClick={() => runQualityCheck(selectedDatasetId)}>检查数据质量</Button>}
+                  {selectedDatasetId && (
+                    <Popconfirm title="删除这个数据集？" description="原始上传文件也会删除，此操作不可撤销。" onConfirm={() => deleteDataset(selectedDatasetId)}>
+                      <Button danger icon={<DeleteOutlined />} aria-label="删除数据集" title="删除数据集" />
+                    </Popconfirm>
+                  )}
+                </div>
+              )}
               {datasets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <span style={{ color: "#888", fontSize: 16, marginRight: 8 }}>数据集：</span>
