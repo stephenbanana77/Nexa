@@ -212,6 +212,12 @@ async def run_workflow(
         WorkflowStep.workflow_id == workflow_id
     ).order_by(WorkflowStep.sort_order).all()
 
+    if not steps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workflow has no steps. Configure at least one step before running.",
+        )
+
     tracker = RunTracker(run_type="workflow", project_id=wf.project_id, ref_id=workflow_id)
     tracker.start()
 

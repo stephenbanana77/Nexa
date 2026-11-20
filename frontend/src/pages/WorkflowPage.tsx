@@ -73,12 +73,16 @@ export default function WorkflowPage() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    await api.post("/api/workflows", { name: newName, description: newDesc, project_id: projectId });
-    message.success("自动化任务已创建");
-    setCreateModal(false);
-    setNewName("");
-    setNewDesc("");
-    loadWorkflows();
+    try {
+      const { data } = await api.post("/api/workflows", { name: newName, description: newDesc, project_id: projectId });
+      message.success("自动化草稿已创建，请配置运行步骤");
+      setCreateModal(false);
+      setNewName("");
+      setNewDesc("");
+      navigate(`/project/${projectId}/workflow/${data.id}`);
+    } catch {
+      message.error("自动化创建失败，请稍后重试");
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -88,6 +92,12 @@ export default function WorkflowPage() {
   };
 
   const handleRun = async (id: string) => {
+    const workflow = workflows.find((item) => item.id === id);
+    if (!workflow?.step_count) {
+      message.warning("请先配置至少一个运行步骤");
+      navigate(`/project/${projectId}/workflow/${id}`);
+      return;
+    }
     setRunModal(id);
     setRunSteps([]);
     setRunStatus("running");
@@ -97,10 +107,16 @@ export default function WorkflowPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("nexa_token")}` },
       });
-      if (!resp.ok) throw new Error(`运行请求失败（${resp.status}）`);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        const detail = typeof body?.detail === "string" ? body.detail : "";
+        throw new Error(detail.toLowerCase().includes("no steps") ? "请先配置至少一个运行步骤" : detail || `运行请求失败（${resp.status}）`);
+      }
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
       let buf = "";
+      let finalStatus: "complete" | "partial" | null = null;
+      let finalError = "";
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -120,13 +136,21 @@ export default function WorkflowPage() {
               setRunSteps(prev => prev.map((s, index) => index === prev.length - 1 ? { ...s, status: "error", detail } : s));
               setRunError(detail);
             } else if (d.event === "workflow_done") {
-              setRunStatus(d.status === "complete" ? "complete" : "partial");
-              if (d.error) setRunError(humanizeRunError(d.error));
+              finalStatus = d.status === "complete" ? "complete" : "partial";
+              finalError = d.error ? humanizeRunError(d.error) : "";
             }
           } catch {}
         }
       }
-      setRunStatus((current) => current === "running" ? "complete" : current);
+      if (finalStatus === "complete") {
+        setRunStatus("complete");
+      } else if (finalStatus === "partial") {
+        setRunStatus("partial");
+        setRunError(finalError);
+      } else {
+        setRunStatus("error");
+        setRunError("运行结束，但没有收到明确的完成状态，请到「审计」中确认结果。");
+      }
       loadWorkflows();
     } catch (error) {
       setRunStatus("error");
@@ -173,11 +197,17 @@ export default function WorkflowPage() {
                     <span>{wf.last_run_at ? `上次运行：${new Date(wf.last_run_at).toLocaleString("zh-CN")}` : "尚未运行"}</span>
                   </div>
                 </div>
-                <Tag color={wf.status === "active" ? "#2563EB" : wf.status === "draft" ? "#d29922" : "#666"}>
-                  {wf.status === "active" ? "已启用" : wf.status === "draft" ? "草稿" : wf.status}
+                <Tag color={!wf.step_count ? "#d29922" : wf.status === "active" ? "#2563EB" : wf.status === "draft" ? "#d29922" : "#666"}>
+                  {!wf.step_count ? "未配置" : wf.status === "active" ? "已启用" : wf.status === "draft" ? "草稿" : wf.status}
                 </Tag>
-                <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>运行</Button>
-                <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} aria-label="编辑自动化" title="编辑自动化" />
+                {wf.step_count > 0 ? (
+                  <>
+                    <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>运行</Button>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} aria-label="编辑自动化" title="编辑自动化" />
+                  </>
+                ) : (
+                  <Button size="small" type="primary" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)}>配置流程</Button>
+                )}
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(wf.id)} aria-label="删除自动化" title="删除自动化" />
               </div>
             </Card>
@@ -185,7 +215,10 @@ export default function WorkflowPage() {
         </div>
       )}
 
-      <Modal title="新建自动化" open={createModal} onOk={handleCreate} onCancel={() => setCreateModal(false)}>
+      <Modal title="新建自动化" open={createModal} onOk={handleCreate} onCancel={() => setCreateModal(false)} okText="创建并配置">
+        <p style={{ color: tokens.color.text.muted, marginTop: 0 }}>
+          先创建草稿，下一步配置数据查询、分析和交付步骤。未配置步骤的自动化不能运行。
+        </p>
         <Input placeholder="名称" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 8 }} />
         <Input.TextArea placeholder="描述" value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2} />
       </Modal>

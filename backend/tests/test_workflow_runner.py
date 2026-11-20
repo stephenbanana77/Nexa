@@ -2,6 +2,19 @@
 import json
 
 
+def test_empty_workflow_cannot_run(client, auth_headers, project_id):
+    resp = client.post("/api/workflows", json={
+        "project_id": project_id,
+        "name": "Empty workflow",
+    }, headers=auth_headers)
+    assert resp.status_code == 200
+
+    run = client.post(f"/api/workflows/{resp.json()['id']}/run", headers=auth_headers)
+
+    assert run.status_code == 400
+    assert run.json()["detail"] == "Workflow has no steps. Configure at least one step before running."
+
+
 def test_workflow_run_partial_failure(client, auth_headers, project_id):
     """When a workflow step fails, the runner emits workflow_done with partial results.
     Also validates step_id tracking and variable interpolation."""

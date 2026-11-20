@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Button, Input, Spin, Card, Tag, message, Popconfirm } from "antd";
+import { Alert, Button, Input, Spin, Card, Tag, message, Popconfirm, Tooltip } from "antd";
 import { SaveOutlined, PlayCircleOutlined, ArrowLeftOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { api } from "../services";
 import { tokens } from "../theme";
@@ -105,17 +105,29 @@ export default function WorkflowEditPage() {
 
   const handleRun = async () => {
     if (!workflowId) return;
+    if (steps.length === 0) {
+      message.warning("请先添加并保存至少一个运行步骤");
+      return;
+    }
+    if (isDirty) {
+      message.warning("流程有未保存的修改，请保存后再运行");
+      return;
+    }
     setRunning(true);
     try {
       const response = await fetch(`/api/workflows/${workflowId}/run`, {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("nexa_token")}` },
       });
-      if (!response.ok) throw new Error(`运行请求失败（${response.status}）`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const detail = typeof body?.detail === "string" ? body.detail : "";
+        throw new Error(detail.toLowerCase().includes("no steps") ? "请先配置至少一个运行步骤" : detail || `运行请求失败（${response.status}）`);
+      }
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let finalStatus = "complete";
+      let finalStatus: string | null = null;
       let finalError = "";
       while (reader) {
         const { done, value } = await reader.read();
@@ -135,7 +147,8 @@ export default function WorkflowEditPage() {
         }
       }
       if (finalStatus === "complete") message.success("任务运行完成，请在「审计」中查看证据");
-      else message.error(`任务产生部分结果后停止${finalError ? `：${finalError}` : ""}`);
+      else if (finalStatus) message.error(`任务产生部分结果后停止${finalError ? `：${finalError}` : ""}`);
+      else message.error("运行结束，但没有收到明确的完成状态，请到「审计」中确认结果");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "运行失败，请稍后重试");
     } finally {
@@ -164,7 +177,11 @@ export default function WorkflowEditPage() {
           placeholder="工作流名称"
         />
         <div style={{ display: "flex", gap: 8 }}>
-          <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running}>运行</Button>
+          <Tooltip title={steps.length === 0 ? "请先添加并保存至少一个步骤" : isDirty ? "请先保存流程修改" : "运行自动化"}>
+            <span>
+              <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running} disabled={steps.length === 0 || isDirty}>运行</Button>
+            </span>
+          </Tooltip>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}
             danger={isDirty}
           >{isDirty ? "保存*" : "保存"}</Button>
@@ -179,6 +196,16 @@ export default function WorkflowEditPage() {
       />
 
       <Tag color={workflow.status === "draft" ? "default" : "blue"}>{workflow.status === "draft" ? "草稿" : workflow.status === "active" ? "已启用" : workflow.status}</Tag>
+
+      {steps.length === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message="这个自动化还不能运行"
+          description="请添加至少一个步骤并保存。通常从 SQL 查询开始，再添加分析、洞察或可视化步骤。"
+          style={{ marginTop: 16 }}
+        />
+      )}
 
       {/* Steps */}
       <div style={{ marginTop: 24 }}>
