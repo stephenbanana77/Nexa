@@ -33,16 +33,17 @@ function App() {
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
-          colorPrimary: "#2563EB",
-          colorPrimaryBg: "#141414",
-          colorBgContainer: "#1a1a1a",
-          colorBgElevated: "#1f1f1f",
-          colorText: "#ddd",
-          colorTextSecondary: "#888",
-          colorBorder: "#333",
-          borderRadius: 8,
-          fontSize: 20,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          colorPrimary: "#f06436",
+          colorPrimaryHover: "#fb7b52",
+          colorPrimaryBg: "#211b18",
+          colorBgContainer: "#1a1d1a",
+          colorBgElevated: "#202420",
+          colorText: "#e3e7e2",
+          colorTextSecondary: "#8e968e",
+          colorBorder: "#3a3f3a",
+          borderRadius: 6,
+          fontSize: 14,
+          fontFamily: "'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif",
         },
       }}
     >

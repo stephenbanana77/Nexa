@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { Tabs, Upload, Button, Table, Select, Tag, message, Spin, Modal } from "antd";
-import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { Tabs, Upload, Button, Table, Select, Tag, message, Spin, Modal, Dropdown } from "antd";
+import { UploadOutlined, ArrowLeftOutlined, DatabaseOutlined, SafetyCertificateOutlined, MoreOutlined } from "@ant-design/icons";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -170,25 +170,49 @@ export default function ProjectPage() {
   }
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
+  const activeTab = searchParams.get("tab") || "chat";
+  const advancedTabLabels: Record<string, string> = {
+    insights: "Saved insights",
+    semantic: "Metric definitions",
+    notebook: "Notebook",
+    settings: "Provider settings",
+  };
+
+  const openTab = (key: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", key);
+    if (key !== "chat") next.delete("question");
+    setSearchParams(next);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d0d0d" }}>
-      <div style={{ background: "#1a1a1a", padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #333" }}>
+      <div style={{ background: "#171a17", padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #333" }}>
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate("/")} style={{ color: "#888" }} />
         <span style={{ color: "#fff", fontWeight: 500, fontSize: 17 }}>{project.name}</span>
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [
+              { key: "semantic", label: "Metric definitions" },
+              { key: "insights", label: "Saved insights" },
+              { key: "notebook", label: "Notebook" },
+              { key: "skills", label: "Skills" },
+              { key: "settings", label: "Provider settings" },
+            ],
+            onClick: ({ key }) => key === "skills" ? navigate(`/project/${projectId}/skills`) : openTab(key),
+          }}
+        >
+          <Button type="text" icon={<MoreOutlined />} style={{ marginLeft: "auto", color: "#999" }}>Advanced tools</Button>
+        </Dropdown>
       </div>
       <Tabs
-        activeKey={searchParams.get("tab") || "chat"}
-        onChange={(key) => {
-          const next = new URLSearchParams(searchParams);
-          next.set("tab", key);
-          if (key !== "chat") next.delete("question");
-          setSearchParams(next);
-        }}
+        activeKey={activeTab}
+        onChange={openTab}
         style={{ padding: "0 24px" }}
         tabBarStyle={{ borderBottom: "1px solid #333" }}
         items={[
-          { key: "chat", label: <span style={{ color: "#60a5fa" }}>Chat</span>,
+          { key: "chat", label: <span style={{ color: "#f08a67" }}>Agent</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ChatPage projectId={projectId!} /></Suspense></div> },
           { key: "data", label: <span>Data</span>,
             children: <div style={{ padding: "24px 0", width: "100%" }}>
@@ -249,20 +273,16 @@ export default function ProjectPage() {
                 {!previewData && selectedDataset.schema_info && <Button onClick={() => loadPreview(selectedDataset.id)} style={{ marginTop: 12 }}>Load Data Preview</Button>}
               </>}
             </div> },
-          { key: "insights", label: <span>Insights</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><InsightsPage projectId={projectId!} /></Suspense></div> },
-          { key: "semantic", label: <span>Semantic Layer</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SemanticLayerPage projectId={projectId!} /></Suspense></div> },
-          { key: "reports", label: <span>Reports</span>,
+          { key: "reports", label: <span>Deliverables</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><ReportsPage projectId={projectId!} /></Suspense></div> },
-          { key: "notebook", label: <span>Notebook</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><NotebookPage projectId={projectId!} /></Suspense></div> },
-          { key: "history", label: <span>History</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><RunHistoryPage /></Suspense></div> },
-          { key: "workflows", label: <span>Workflows</span>,
+          { key: "workflows", label: <span>Automations</span>,
             children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><WorkflowPage /></Suspense></div> },
-          { key: "settings", label: <span>Settings</span>,
-            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SettingsPage /></Suspense></div> },
+          { key: "history", label: <span>Audit</span>,
+            children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><RunHistoryPage /></Suspense></div> },
+          ...(activeTab === "insights" ? [{ key: "insights", label: <span>{advancedTabLabels.insights}</span>, children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><InsightsPage projectId={projectId!} /></Suspense></div> }] : []),
+          ...(activeTab === "semantic" ? [{ key: "semantic", label: <span>{advancedTabLabels.semantic}</span>, children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SemanticLayerPage projectId={projectId!} /></Suspense></div> }] : []),
+          ...(activeTab === "notebook" ? [{ key: "notebook", label: <span>{advancedTabLabels.notebook}</span>, children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><NotebookPage projectId={projectId!} /></Suspense></div> }] : []),
+          ...(activeTab === "settings" ? [{ key: "settings", label: <span>{advancedTabLabels.settings}</span>, children: <div style={{ padding: "12px 0", width: "100%" }}><Suspense fallback={<TabFallback />}><SettingsPage /></Suspense></div> }] : []),
         ]}
       />
       <MySQLConnectModal

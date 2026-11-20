@@ -40,12 +40,14 @@ class WorkflowCreate(BaseModel):
     description: str = ""
     project_id: str
     steps: list[dict] | None = None
+    inputs: dict | None = None
 
 
 class WorkflowUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     steps: list[dict] | None = None
+    inputs: dict | None = None
 
 
 @router.get("/{project_id}")
@@ -74,6 +76,7 @@ def list_workflows(
             "status": w.status,
             "version": w.version,
             "step_count": len(w.steps) if w.steps else 0,
+            "inputs": w.inputs or {},
             "last_run_at": w.last_run_at.isoformat() if w.last_run_at else None,
             "created_at": w.created_at.isoformat() if w.created_at else None,
         }
@@ -93,7 +96,13 @@ def create_workflow(
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    wf = Workflow(name=req.name, description=req.description, project_id=req.project_id)
+    wf = Workflow(
+        name=req.name,
+        description=req.description,
+        project_id=req.project_id,
+        inputs=req.inputs or {},
+        created_by=current_user.id,
+    )
     db.add(wf)
     db.flush()
     for i, step in enumerate(req.steps or []):
@@ -127,6 +136,8 @@ def get_workflow(
         "description": wf.description,
         "project_id": wf.project_id,
         "status": wf.status,
+        "inputs": wf.inputs or {},
+        "last_run_at": wf.last_run_at.isoformat() if wf.last_run_at else None,
         "steps": [
             {
                 "id": s.id,
@@ -155,6 +166,8 @@ def update_workflow(
         wf.name = req.name
     if req.description is not None:
         wf.description = req.description
+    if req.inputs is not None:
+        wf.inputs = req.inputs
     if req.steps is not None:
         # Clear existing steps and rebuild
         db.query(WorkflowStep).filter(WorkflowStep.workflow_id == workflow_id).delete()
@@ -430,6 +443,7 @@ class ChatToWorkflowRequest(BaseModel):
     sql: str | None = None
     charts: list[dict] = Field(default_factory=list)
     insight: str | None = None
+    task_config: dict = Field(default_factory=dict)
 
 
 @router.post("/chat-to-workflow", status_code=status.HTTP_201_CREATED)
@@ -445,10 +459,12 @@ def chat_to_workflow(
         raise HTTPException(status_code=404, detail="Project not found")
 
     wf = Workflow(
-        name=f"Chat: {req.question[:60]}",
+        name=str(req.task_config.get("name") or req.question[:80]),
         description=req.question,
         project_id=req.project_id,
         status="draft",
+        inputs={"task": req.task_config},
+        created_by=current_user.id,
     )
     db.add(wf)
     db.flush()

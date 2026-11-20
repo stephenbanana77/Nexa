@@ -1,7 +1,19 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Input, message, Select } from "antd";
-import { SendOutlined, SaveOutlined, BookOutlined, PlusOutlined, BranchesOutlined, ShareAltOutlined, DownloadOutlined, CopyOutlined } from "@ant-design/icons";
+import { Button, Input, Modal, Select, Switch, message } from "antd";
+import {
+  ArrowRightOutlined,
+  BranchesOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CopyOutlined,
+  DatabaseOutlined,
+  DownloadOutlined,
+  ExclamationCircleOutlined,
+  FileDoneOutlined,
+  PlusOutlined,
+  SendOutlined,
+} from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import ReactECharts from "echarts-for-react";
 import api from "../api/client";
@@ -10,12 +22,13 @@ import "./ChatPage.css";
 interface ChartConfig {
   type: string;
   title: string;
-  options: Record<string, any>;
+  options: Record<string, unknown>;
 }
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  error?: boolean;
   sql?: string;
   columns?: string[];
   rows?: unknown[][];
@@ -36,14 +49,39 @@ interface ProgressStage {
 }
 
 const STAGES: ProgressStage[] = [
-  { name: "understanding", label: "Understanding intent", status: "pending" },
-  { name: "planning", label: "Planning analysis", status: "pending" },
-  { name: "selecting_skill", label: "Selecting skill", status: "pending" },
-  { name: "sql_generating", label: "Generating SQL", status: "pending" },
-  { name: "querying", label: "Querying data", status: "pending" },
-  { name: "analyzing", label: "Analyzing results", status: "pending" },
-  { name: "visualizing", label: "Generating charts", status: "pending" },
+  { name: "understanding", label: "Understand the business task", status: "pending" },
+  { name: "planning", label: "Plan the analysis", status: "pending" },
+  { name: "selecting_skill", label: "Choose analysis method", status: "pending" },
+  { name: "sql_generating", label: "Build a governed query", status: "pending" },
+  { name: "querying", label: "Run against source data", status: "pending" },
+  { name: "analyzing", label: "Explain material findings", status: "pending" },
+  { name: "visualizing", label: "Prepare the deliverable", status: "pending" },
 ];
+
+const TASK_STARTERS = [
+  "Every week, compare sales and profit with the previous period. Explain the largest changes and prepare an evidence-backed review.",
+  "Check this data for quality problems and tell me what must be fixed before the report is published.",
+  "Find the segments that are losing profit despite growing sales, then recommend the next analysis to verify the cause.",
+];
+
+function readableError(detail: unknown) {
+  if (typeof detail === "string") {
+    const normalized = detail.toLowerCase();
+    if (normalized.includes("authentication") || normalized.includes("401") || normalized.includes("api key")) {
+      return "The model connection was rejected. Open Advanced tools > Provider settings, test the credentials, then run this task again.";
+    }
+    if (normalized.includes("no available channel") || normalized.includes("503") || normalized.includes("unavailable")) {
+      return "The selected model is not available from the provider. Choose another model in Provider settings and retry.";
+    }
+    if (normalized.includes("timeout") || normalized.includes("timed out")) {
+      return "The model did not respond before the run deadline. Retry once or choose a faster model in Provider settings.";
+    }
+    return detail.replace(/\s*\(request_id:[^)]+\)/gi, "");
+  }
+  if (Array.isArray(detail)) return detail.map((item) => typeof item === "string" ? item : JSON.stringify(item)).join("; ");
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return "The analysis did not complete. Check the model connection and try again.";
+}
 
 export default function ChatPage({ projectId }: { projectId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,20 +89,25 @@ export default function ChatPage({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([]);
-  const [datasets, setDatasets] = useState<{id: string; name: string}[]>([]);
-  const [relationships, setRelationships] = useState<any>(null);
+  const [datasets, setDatasets] = useState<{ id: string; name: string; row_count?: number }[]>([]);
+  const [stages, setStages] = useState<ProgressStage[]>(STAGES);
+  const [showProgress, setShowProgress] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskName, setTaskName] = useState("");
+  const [cadence, setCadence] = useState("manual");
+  const [comparePrevious, setComparePrevious] = useState(true);
+  const [delivery, setDelivery] = useState("workspace_report");
+  const [savingTask, setSavingTask] = useState(false);
   const [searchParams] = useSearchParams();
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (!projectId) return;
     api.get(`/api/datasets?project_id=${projectId}`).then(({ data }) => {
       const list = data.items || data;
-      setDatasets(Array.isArray(list) ? list : []);
-      if (list.length > 0) setSelectedDatasetIds([list[0].id]);
-    }).catch(() => {});
-    // Load relationships if 2+ datasets
-    api.get(`/api/datasets/relationships?project_id=${projectId}`).then(({ data }) => {
-      setRelationships(data);
+      const safeList = Array.isArray(list) ? list : [];
+      setDatasets(safeList);
+      if (safeList.length > 0) setSelectedDatasetIds([safeList[0].id]);
     }).catch(() => {});
   }, [projectId]);
 
@@ -72,556 +115,427 @@ export default function ChatPage({ projectId }: { projectId: string }) {
     const question = searchParams.get("question");
     if (question) setInput(question);
   }, [searchParams]);
-  const [stages, setStages] = useState<ProgressStage[]>(STAGES);
-  const [showProgress, setShowProgress] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, showProgress]);
 
-  const resetStages = () => setStages(STAGES.map((s) => ({ ...s, status: "pending" as const })));
+  const selectedDatasets = useMemo(
+    () => datasets.filter((dataset) => selectedDatasetIds.includes(dataset.id)),
+    [datasets, selectedDatasetIds],
+  );
 
-  const updateStage = (eventName: string, status: "running" | "done") => {
-    setStages((prev) =>
-      prev.map((s) => {
-        if (s.name === eventName) return { ...s, status };
-        return s;
-      })
-    );
+  const latestAnswer = useMemo(
+    () => [...messages].reverse().find((item) => item.role === "assistant" && !item.error && item.sql),
+    [messages],
+  );
+
+  const latestQuestion = useMemo(() => {
+    if (!latestAnswer) return "";
+    const answerIndex = messages.indexOf(latestAnswer);
+    return [...messages.slice(0, answerIndex)].reverse().find((item) => item.role === "user")?.content || "";
+  }, [latestAnswer, messages]);
+
+  const resetStages = () => setStages(STAGES.map((stage) => ({ ...stage, status: "pending" })));
+
+  const advanceStage = (name: string) => {
+    const target = STAGES.findIndex((stage) => stage.name === name);
+    if (target < 0) return;
+    setStages((current) => current.map((stage, index) => ({
+      ...stage,
+      status: index < target ? "done" : index === target ? "running" : "pending",
+    })));
   };
 
-  const newConversation = () => {
+  const markStagesDone = () => setStages((current) => current.map((stage) => ({ ...stage, status: "done" })));
+
+  const startNewTask = () => {
     setMessages([]);
     setConversationId(null);
+    resetStages();
+    setShowProgress(false);
   };
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    if (selectedDatasetIds.length === 0) {
+      message.info("Connect or upload data before the agent runs this task");
+      navigate(`/project/${projectId}?tab=data`);
+      return;
+    }
 
     setInput("");
     setLoading(true);
     resetStages();
     setShowProgress(true);
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setMessages((current) => [...current, { role: "user", content: text }]);
 
     try {
       const token = localStorage.getItem("nexa_token");
       const body: Record<string, unknown> = {
         project_id: projectId,
         message: text,
-        dataset_ids: selectedDatasetIds.length > 0 ? selectedDatasetIds : undefined,
+        dataset_ids: selectedDatasetIds,
       };
       if (conversationId) body.conversation_id = conversationId;
 
       const response = await fetch("/api/chat/stream", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
-
-      if (!response.ok) throw new Error("Stream failed");
+      if (!response.ok) throw new Error(`Analysis request failed (${response.status})`);
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let finalData: Record<string, unknown> = {};
-      let streamFailed = false;
-      let credibilityMeta = { rows_queried: 0, sql_retries: 0, mode: "sql" as string, data_coverage: "unknown" as string };
+      let failed = false;
+      const credibility = { rows_queried: 0, sql_retries: 0, mode: "sql", data_coverage: "unknown" };
 
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("event: ")) continue;
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const eventName = data.event;
-
-              if (eventName === "understanding") {
-                updateStage("understanding", "done");
-              } else if (eventName === "planning") {
-                updateStage("planning", "running");
-              } else if (eventName === "selecting_skill") {
-                updateStage("planning", "done");
-                updateStage("selecting_skill", "running");
-              } else if (eventName === "running_skill") {
-                updateStage("selecting_skill", "done");
-                credibilityMeta.mode = "skill";
-              } else if (eventName === "sql_generating") {
-                credibilityMeta.mode = "sql";
-                updateStage("planning", "done");
-                updateStage("sql_generating", "running");
-              } else if (eventName === "querying") {
-                updateStage("sql_generating", "done");
-                updateStage("querying", "running");
-              } else if (eventName === "analyzing") {
-                updateStage("querying", "done");
-                updateStage("analyzing", "running");
-              } else if (eventName === "visualizing") {
-                updateStage("analyzing", "done");
-                updateStage("visualizing", "running");
-              } else if (eventName === "insight") {
-                setShowProgress(false);
-                finalData = data;
-              } else if (eventName === "conversation_created") {
-                setConversationId(data.conversation_id);
-              } else if (eventName === "done") {
-                setShowProgress(false);
-              } else if (eventName === "retry") {
-                // Reset stages for retry attempt
-                credibilityMeta.sql_retries += 1;
-                resetStages();
-                setShowProgress(true);
-                setLoading(true);
-              } else if (eventName === "error" || eventName === "timeout") {
-                streamFailed = true;
-                setShowProgress(false);
-                const detail = data.message || "Analysis timed out";
-                const errorText = typeof detail === "string"
-                  ? detail
-                  : Array.isArray(detail)
-                    ? detail.map((item) => typeof item === "string" ? item : item?.msg || JSON.stringify(item)).join("; ")
-                    : detail && typeof detail === "object"
-                      ? JSON.stringify(detail)
-                      : "Analysis failed";
-                message.error(errorText);
-              }
-            } catch {}
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            const eventName = data.event;
+            if (eventName === "understanding") advanceStage("understanding");
+            else if (eventName === "planning") advanceStage("planning");
+            else if (eventName === "selecting_skill") advanceStage("selecting_skill");
+            else if (eventName === "running_skill") { advanceStage("selecting_skill"); credibility.mode = "skill"; }
+            else if (eventName === "sql_generating") advanceStage("sql_generating");
+            else if (eventName === "querying") advanceStage("querying");
+            else if (eventName === "analyzing") advanceStage("analyzing");
+            else if (eventName === "visualizing") advanceStage("visualizing");
+            else if (eventName === "insight") finalData = data;
+            else if (eventName === "conversation_created") setConversationId(data.conversation_id);
+            else if (eventName === "retry") credibility.sql_retries += 1;
+            else if (eventName === "error" || eventName === "timeout") {
+              failed = true;
+              const errorText = readableError(data.message);
+              setMessages((current) => [...current, { role: "assistant", content: errorText, error: true }]);
+            }
+          } catch {
+            // Ignore malformed keep-alive chunks while preserving the stream.
           }
         }
       }
 
-      if (streamFailed) return;
+      setShowProgress(false);
+      if (failed) return;
+      if (!finalData.summary) throw new Error("The provider returned no analysis result");
 
-      const finalSummary = String(finalData.summary || "Analysis complete");
-      const finalSql = finalData.sql as string | undefined;
-      const finalCols = finalData.columns as string[] | undefined;
-      const finalRows = finalData.rows as unknown[][] | undefined;
-      const finalRowCount = finalData.row_count as number | undefined;
-      const finalCharts = (finalData.charts || []) as ChartConfig[];
-      const finalTotalRows = finalData.total_rows as number | undefined;
-
-      credibilityMeta.rows_queried = finalRowCount || 0;
-      if (credibilityMeta.rows_queried > 0) {
-        credibilityMeta.data_coverage = finalTotalRows
-          ? `sample of ${credibilityMeta.rows_queried}/${finalTotalRows}`
-          : `${credibilityMeta.rows_queried} rows`;
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: finalSummary,
-          sql: finalSql,
-          columns: finalCols,
-          rows: finalRows,
-          row_count: finalRowCount,
-          charts: finalCharts,
-          credibility: { ...credibilityMeta },
-        },
-      ]);
-    } catch (err: unknown) {
-      message.error(err instanceof Error ? err.message : "Chat failed");
+      markStagesDone();
+      const rowCount = Number(finalData.row_count || 0);
+      const totalRows = Number(finalData.total_rows || 0);
+      credibility.rows_queried = rowCount;
+      credibility.data_coverage = totalRows ? `${rowCount} result rows from ${totalRows.toLocaleString()} source rows` : `${rowCount} result rows`;
+      setMessages((current) => [...current, {
+        role: "assistant",
+        content: String(finalData.summary),
+        sql: finalData.sql as string | undefined,
+        columns: finalData.columns as string[] | undefined,
+        rows: finalData.rows as unknown[][] | undefined,
+        row_count: rowCount,
+        charts: (finalData.charts || []) as ChartConfig[],
+        credibility,
+      }]);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "The analysis did not complete";
+      setMessages((current) => [...current, { role: "assistant", content: errorText, error: true }]);
       setShowProgress(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const statusColors: Record<string, string> = {
-    done: "#22c55e",
-    running: "#d29922",
-    pending: "#484f58",
-  };
-
-  const saveInsight = async (msg: ChatMessage) => {
+  const saveInsight = async (answer: ChatMessage) => {
     try {
-      const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
       await api.post("/api/insights/", {
         project_id: projectId,
-        question: userMsg?.content || "",
+        question: latestQuestion,
         content: {
-          summary: msg.content,
-          sql: msg.sql,
-          columns: msg.columns,
-          rows: msg.rows?.slice(0, 20),
-          row_count: msg.row_count,
-          charts: msg.charts || [],
+          summary: answer.content,
+          sql: answer.sql,
+          columns: answer.columns,
+          rows: answer.rows?.slice(0, 20),
+          row_count: answer.row_count,
+          charts: answer.charts || [],
         },
       });
-      message.success("Insight saved");
+      message.success("Saved to deliverables");
     } catch {
-      message.error("Failed to save insight");
+      message.error("The deliverable could not be saved. The analysis remains in Audit.");
     }
   };
 
-  const saveAsWorkflow = async () => {
+  const openTaskModal = () => {
+    if (!latestAnswer) return;
+    setTaskName(latestQuestion.slice(0, 80) || "Recurring analysis task");
+    setTaskModalOpen(true);
+  };
+
+  const saveRepeatableTask = async () => {
+    if (!latestAnswer) return;
+    setSavingTask(true);
     try {
-      const { data } = await api.get(`/api/runs/${projectId}?limit=1`);
-      if (data.length > 0) {
-        const wf = await api.post(`/api/workflows/from-run/${data[0].id}`);
-        const wfId = wf.data.id;
-        if (wfId) {
-          navigate(`/project/${projectId}/workflow/${wfId}`);
-        } else {
-          message.success("Saved as Workflow — check Workflows tab");
-        }
-      } else {
-        message.warning("No analysis run found to convert");
-      }
+      await api.post("/api/workflows/chat-to-workflow", {
+        project_id: projectId,
+        question: latestQuestion,
+        sql: latestAnswer.sql,
+        charts: latestAnswer.charts || [],
+        insight: "Compare the current result with the prior run when available. Explain material changes, cite the query evidence, and state what should be checked next.",
+        task_config: {
+          name: taskName.trim() || "Recurring analysis task",
+          cadence,
+          compare_previous: comparePrevious,
+          delivery,
+          dataset_ids: selectedDatasetIds,
+          scheduler_status: "not_connected",
+        },
+      });
+      message.success("Repeatable task saved");
+      setTaskModalOpen(false);
+      navigate(`/project/${projectId}?tab=workflows`);
     } catch {
-      message.error("Failed to save workflow");
+      message.error("The repeatable task could not be saved");
+    } finally {
+      setSavingTask(false);
     }
   };
 
-  const openInNotebook = async (msg: ChatMessage) => {
-    try {
-      const userMsg = messages.find((m) => m.role === "user" && messages.indexOf(m) < messages.indexOf(msg));
-      const cells: { cell_type: string; content: string; sort_order: number }[] = [];
-      cells.push({ cell_type: "markdown", content: `# Analysis: ${userMsg?.content || ""}`, sort_order: 0 });
-      if (msg.sql) cells.push({ cell_type: "sql", content: msg.sql, sort_order: 1 });
-      cells.push({ cell_type: "markdown", content: `## Result\n\n${msg.content}`, sort_order: cells.length });
-      await api.post("/api/notebooks/", { project_id: projectId, cells });
-      message.success("Opened in Notebook");
-      window.open(`/project/${projectId}?tab=notebook`, "_self");
-    } catch {
-      message.error("Failed to create notebook");
-    }
+  const downloadAnalysis = (answer: ChatMessage) => {
+    const md = `# Nexa analysis\n\n${answer.content}\n\n${answer.sql ? `## Query\n\n\`\`\`sql\n${answer.sql}\n\`\`\`` : ""}`;
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "nexa-analysis.md";
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   };
 
   return (
-    <div style={{ height: "calc(100vh - 130px)", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontSize: 16, color: "#666" }}>
-          {conversationId ? "Continue conversation" : "New conversation"}
-        </span>
-        {messages.length > 0 && (
-          <Button size="small" type="text" icon={<PlusOutlined />} onClick={newConversation} style={{ color: "#888" }}>
-            New Chat
-          </Button>
-        )}
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "16px 0",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {messages.length === 0 && !loading && (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <p style={{ color: "#aaa", fontSize: 17, margin: 0 }}>Ask a question about your data</p>
-            <p style={{ color: "#666", fontSize: 16, marginTop: 4 }}>
-              Example: "What is the total sales by region?"
-            </p>
+    <div className="agent-workspace">
+      <section className="agent-conversation">
+        <header className="agent-conversation-header">
+          <div>
+            <span className="agent-kicker">Data task agent</span>
+            <h2>{conversationId ? "Continue the task" : "Describe the outcome you need"}</h2>
           </div>
-        )}
+          {messages.length > 0 && (
+            <Button type="text" icon={<PlusOutlined />} onClick={startNewTask}>New task</Button>
+          )}
+        </header>
 
-        {messages.map((msg, i) =>
-          msg.role === "user" ? (
-            <div key={i} className="chat-message-user">
-              {msg.content}
+        <div className="agent-thread">
+          {messages.length === 0 && !loading && (
+            <div className="agent-empty">
+              <div className="agent-empty-mark">N</div>
+              <h3>Give the agent a recurring responsibility</h3>
+              <p>Include the decision, comparison period, and what should trigger attention. You can refine the task after the first run.</p>
+              <div className="agent-starters">
+                {TASK_STARTERS.map((starter) => (
+                  <button type="button" key={starter} onClick={() => setInput(starter)}>
+                    <span>{starter}</span><ArrowRightOutlined />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((item, index) => item.role === "user" ? (
+            <div className="task-message" key={index}>
+              <span className="task-message-label">Task</span>
+              <p>{item.content}</p>
             </div>
           ) : (
-            <div key={i} className="chat-message-ai">
-              <div className="avatar">N</div>
-              <div className="content">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+            <article className={`agent-answer ${item.error ? "agent-answer-error" : ""}`} key={index}>
+              <div className="agent-answer-rail">
+                {item.error ? <ExclamationCircleOutlined /> : <CheckCircleOutlined />}
+              </div>
+              <div className="agent-answer-body">
+                {item.error && <strong className="error-title">Run did not complete</strong>}
+                <ReactMarkdown>{item.content}</ReactMarkdown>
 
-                {/* Inline ECharts */}
-                {msg.charts && msg.charts.length > 0 && msg.charts.map((chart, ci) => (
-                  <div key={ci} style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 16, color: "#666", marginBottom: 4, textTransform: "uppercase" }}>
-                      {chart.title}
-                    </div>
-                    <div style={{
-                      background: "#0d0d0d",
-                      borderRadius: 6,
-                      padding: 8,
-                      border: "0.5px solid #333",
-                    }}>
-                      <ReactECharts
-                        option={chart.options}
-                        style={{ height: 220, width: "100%" }}
-                        theme="dark"
-                        notMerge
-                      />
-                    </div>
+                {item.charts?.map((chart, chartIndex) => (
+                  <div className="agent-chart" key={`${chart.title}-${chartIndex}`}>
+                    <strong>{chart.title}</strong>
+                    <ReactECharts option={chart.options} style={{ height: 260, width: "100%" }} theme="dark" notMerge />
                   </div>
                 ))}
 
-                {msg.sql && (
-                  <pre
-                    style={{
-                      marginTop: 12,
-                      background: "#0d0d0d",
-                      padding: 10,
-                      borderRadius: 6,
-                      fontSize: 16,
-                      overflow: "auto",
-                      color: "#60a5fa",
-                    }}
-                  >
-                    {msg.sql}
-                  </pre>
-                )}
-                {msg.rows && msg.columns && msg.rows.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 16, color: "#888", marginBottom: 6 }}>
-                      Results ({msg.rows.length} of {msg.row_count} rows)
-                    </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
-                        <thead>
-                          <tr>
-                            {msg.columns.map((col: string) => (
-                              <th
-                                key={col}
-                                style={{
-                                  padding: "4px 10px",
-                                  borderBottom: "1px solid #333",
-                                  textAlign: "left",
-                                  color: "#888",
-                                  fontWeight: 500,
-                                }}
-                              >
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {msg.rows.slice(0, 10).map((row: unknown[], ri: number) => (
-                            <tr key={ri}>
-                              {row.map((val: unknown, ci: number) => (
-                                <td
-                                  key={ci}
-                                  style={{
-                                    padding: "3px 10px",
-                                    borderBottom: "0.5px solid #222",
-                                    color: "#ccc",
-                                  }}
-                                >
-                                  {String(val)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
+                {item.rows && item.columns && item.rows.length > 0 && (
+                  <div className="agent-result-table">
+                    <div className="result-table-heading">Query result <span>{item.row_count} rows</span></div>
+                    <div className="result-table-scroll">
+                      <table>
+                        <thead><tr>{item.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+                        <tbody>{item.rows.slice(0, 10).map((row, rowIndex) => (
+                          <tr key={rowIndex}>{row.map((value, columnIndex) => <td key={columnIndex}>{String(value ?? "")}</td>)}</tr>
+                        ))}</tbody>
                       </table>
                     </div>
                   </div>
                 )}
-                {/* Credibility badge */}
-                {msg.credibility && (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{
-                      fontSize: 11, padding: "2px 8px", borderRadius: 4,
-                      background: "#1b2635", color: "#60a5fa", border: "0.5px solid #1e3a5f",
-                    }}>
-                      {msg.credibility.mode.toUpperCase()}
-                    </span>
-                    <span style={{
-                      fontSize: 11, padding: "2px 8px", borderRadius: 4,
-                      background: "#1b2635", color: "#a3b8cc", border: "0.5px solid #2d3a4a",
-                    }}>
-                      {msg.credibility.data_coverage}
-                    </span>
-                    {msg.credibility.sql_retries > 0 && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 8px", borderRadius: 4,
-                        background: "#2d1b1b", color: "#f87171", border: "0.5px solid #5f1e1e",
-                      }}>
-                        {msg.credibility.sql_retries} retr{msg.credibility.sql_retries > 1 ? "ies" : "y"}
-                      </span>
-                    )}
-                  </div>
+
+                {item.sql && (
+                  <details className="query-evidence">
+                    <summary>View query evidence</summary>
+                    <pre>{item.sql}</pre>
+                  </details>
                 )}
 
-                {/* Action buttons — primary CTA first */}
-                <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <Button
-                    type="primary"
-                    icon={<ShareAltOutlined />}
-                    onClick={async () => {
-                      await saveInsight(msg);
-                      navigate(`/project/${projectId}/dashboard`);
-                    }}
-                  >
-                    View in Dashboard
-                  </Button>
-                  {msg.content && (
-                    <Button
-                      icon={<DownloadOutlined />}
-                      onClick={() => {
-                        const safeSql = (msg.sql || "").replace(/```/g, "'''");
-                        const md = `# Nexa Analysis\n\n${msg.content}\n\n${msg.columns?.length ? "## Data\n\n| " + msg.columns.join(" | ") + " |\n|" + msg.columns.map(() => "---").join("|") + "|\n" + (msg.rows || []).slice(0, 20).map((r: unknown[]) => "| " + r.map((v: unknown) => String(v ?? "").replace(/\|/g, "\\|")).join(" | ") + " |").join("\n") + "\n" : ""}\n\n${safeSql ? "```sql\n" + safeSql + "\n```" : ""}`;
-                        const blob = new Blob([md], { type: "text/markdown" });
-                        const a = document.createElement("a");
-                        const url = URL.createObjectURL(blob);
-                        a.href = url; a.download = "analysis.md"; a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 100);
-                      }}
-                    >
-                      Export Report
-                    </Button>
-                  )}
-                  {msg.content && (
-                    <Button
-                      icon={<CopyOutlined />}
-                      onClick={() => { navigator.clipboard.writeText(msg.content!); message.success("Copied!"); }}
-                    >
-                      Copy
-                    </Button>
-                  )}
-                  {msg.rows && msg.rows.length > 0 && (
-                    <Button
-                      icon={<DownloadOutlined />}
-                      onClick={() => {
-                        const escapeCsv = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`;
-                        const csv = [msg.columns?.map(escapeCsv).join(",") || "", ...(msg.rows || []).map((r: unknown[]) => r.map(escapeCsv).join(","))].join("\n");
-                        const blob = new Blob([csv], { type: "text/csv" });
-                        const a = document.createElement("a");
-                        const url = URL.createObjectURL(blob);
-                        a.href = url; a.download = "export.csv"; a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 100);
-                      }}
-                    >
-                      CSV
-                    </Button>
-                  )}
-                  <Button type="text" size="small" icon={<SaveOutlined />} onClick={() => saveInsight(msg)} style={{ color: "#888" }}>Save</Button>
-                  <Button type="text" size="small" icon={<BranchesOutlined />} onClick={saveAsWorkflow} style={{ color: "#888" }}>Workflow</Button>
-                  <Button type="text" size="small" icon={<BookOutlined />} onClick={() => openInNotebook(msg)} style={{ color: "#888" }}>Notebook</Button>
-                </div>
+                {!item.error && item.sql && (
+                  <div className="answer-actions">
+                    <Button type="primary" icon={<BranchesOutlined />} onClick={openTaskModal}>Save as repeatable task</Button>
+                    <Button icon={<FileDoneOutlined />} onClick={() => saveInsight(item)}>Save deliverable</Button>
+                    <Button icon={<DownloadOutlined />} onClick={() => downloadAnalysis(item)} aria-label="Download analysis" />
+                    <Button icon={<CopyOutlined />} onClick={() => navigator.clipboard.writeText(item.content)} aria-label="Copy analysis" />
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+
+          {showProgress && (
+            <div className="agent-running">
+              <span className="running-signal" />
+              <div>
+                <strong>Agent is working through the task</strong>
+                <span>{stages.find((stage) => stage.status === "running")?.label || "Preparing the analysis"}</span>
               </div>
             </div>
-          )
-        )}
-
-        {showProgress && (
-          <div className="chat-message-ai">
-            <div className="avatar">N</div>
-            <div className="chat-progress">
-              {stages.map((stage) => (
-                <div key={stage.name} className="chat-progress-row">
-                  <div
-                    className={`chat-progress-dot ${stage.status}${stage.status === "running" ? " pulse-dot" : ""}`}
-                  />
-                  <span
-                    className="chat-progress-label"
-                    style={{ color: stage.status === "pending" ? "#484f58" : stage.status === "running" ? "#e6edf3" : "#aaa" }}
-                  >
-                    {stage.label}
-                  </span>
-                  <span className="chat-progress-status" style={{ color: statusColors[stage.status] }}>
-                    {stage.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div ref={chatEndRef} />
-      </div>
-
-      {messages.length === 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          {[
-            { label: "Top 5 by sales", text: "各产品分类的销售额排名前5名" },
-            { label: "Sales trend", text: "按月展示销售额变化趋势" },
-            { label: "YOY comparison", text: "比较去年和今年的利润，做同比分析" },
-            { label: "Data overview", text: "给我一份数据集的整体概览" },
-            { label: "Correlation", text: "分析数值列之间的相关性" },
-            { label: "Top 10 & Bottom 10", text: "找出销售额最高和最低的10个订单" },
-          ].map((p) => (
-            <Button
-              key={p.label}
-              size="small"
-              type="default"
-              style={{ fontSize: 15 }}
-              onClick={() => { setInput(p.text); }}
-            >
-              {p.label}
-            </Button>
-          ))}
+          )}
+          <div ref={chatEndRef} />
         </div>
-      )}
 
-      <div
-        style={{
-          padding: "12px 0",
-          borderTop: "0.5px solid #333",
-          display: "flex",
-          gap: 8,
-        }}
-      >
-        {datasets.length > 0 && (
-          <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+        <footer className="agent-composer">
+          {datasets.length === 0 ? (
+            <button className="connect-data-prompt" type="button" onClick={() => navigate(`/project/${projectId}?tab=data`)}>
+              <DatabaseOutlined /> Connect data before assigning a task <ArrowRightOutlined />
+            </button>
+          ) : (
             <Select
               mode="multiple"
               value={selectedDatasetIds}
-              onChange={(vals) => setSelectedDatasetIds(vals)}
-              style={{ minWidth: 200, background: "#1a1a1a" }}
-              options={datasets.map((d) => ({ value: d.id, label: d.name }))}
-              size="small"
-              placeholder="Select datasets"
-              maxTagCount={2}
+              onChange={setSelectedDatasetIds}
+              options={datasets.map((dataset) => ({ value: dataset.id, label: dataset.name }))}
+              maxTagCount={1}
+              className="dataset-picker"
+              aria-label="Datasets used by the agent"
             />
-            {relationships?.relationships?.length > 0 && selectedDatasetIds.length >= 2 && (
-              <div style={{ fontSize: 11, color: "#60a5fa" }}>
-                {relationships.relationships
-                  .filter((r: Record<string, unknown>) =>
-                    selectedDatasetIds.includes(r.source as string) &&
-                    selectedDatasetIds.includes(r.target as string)
-                  )
-                  .slice(0, 2)
-                  .map((r: Record<string, unknown>, i: number) => (
-                    <span key={i} style={{ marginRight: 8 }}>
-                      {String(r.source)} \u2194 {String(r.target)}: {" "}
-                      <code style={{ fontSize: 10, color: "#888" }}>
-                        {String(r.compatible_keys || "no keys")}
-                      </code>
-                    </span>
-                  ))}
-              </div>
-            )}
+          )}
+          <Input.TextArea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="Describe the analysis task or ask the agent to refine the result..."
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            disabled={loading}
+            onPressEnter={(event) => {
+              if (!event.shiftKey) {
+                event.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+          <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={loading} disabled={!input.trim()} aria-label="Run task" />
+        </footer>
+      </section>
+
+      <aside className="agent-task-panel">
+        <div className="task-panel-section">
+          <span className="task-panel-label">Current data</span>
+          {selectedDatasets.length === 0 ? (
+            <p className="panel-muted">No source selected.</p>
+          ) : selectedDatasets.map((dataset) => (
+            <div className="data-source-row" key={dataset.id}>
+              <DatabaseOutlined />
+              <span><strong>{dataset.name}</strong><small>{dataset.row_count?.toLocaleString() || "-"} rows</small></span>
+            </div>
+          ))}
+        </div>
+
+        <div className="task-panel-section">
+          <span className="task-panel-label">Run plan</span>
+          <ol className="task-stage-list">
+            {stages.map((stage) => (
+              <li key={stage.name} className={stage.status}>
+                <span className="stage-marker" />
+                <span>{stage.label}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="task-panel-section task-panel-outcome">
+          <span className="task-panel-label">Outcome</span>
+          {latestAnswer ? (
+            <>
+              <strong>Ready to reuse</strong>
+              <p>The query and evidence are available. Save this run as a repeatable task when the result matches the business need.</p>
+              <Button block icon={<BranchesOutlined />} onClick={openTaskModal}>Configure repeat task</Button>
+            </>
+          ) : (
+            <p className="panel-muted">A completed run can become a reusable task with comparison and delivery preferences.</p>
+          )}
+        </div>
+      </aside>
+
+      <Modal
+        title="Save as repeatable task"
+        open={taskModalOpen}
+        onOk={saveRepeatableTask}
+        onCancel={() => setTaskModalOpen(false)}
+        confirmLoading={savingTask}
+        okText="Save task"
+        width={560}
+      >
+        <div className="task-config-form">
+          <label>
+            <span>Task name</span>
+            <Input value={taskName} onChange={(event) => setTaskName(event.target.value)} />
+          </label>
+          <label>
+            <span>Intended cadence</span>
+            <Select
+              value={cadence}
+              onChange={setCadence}
+              options={[
+                { value: "manual", label: "Run on demand" },
+                { value: "on_new_data", label: "When new data arrives" },
+                { value: "weekly", label: "Weekly" },
+                { value: "monthly", label: "Monthly" },
+              ]}
+            />
+          </label>
+          <label>
+            <span>Deliver as</span>
+            <Select
+              value={delivery}
+              onChange={setDelivery}
+              options={[
+                { value: "workspace_report", label: "Workspace report" },
+                { value: "review_queue", label: "Review queue" },
+                { value: "download", label: "Downloadable report" },
+              ]}
+            />
+          </label>
+          <div className="task-config-switch">
+            <span><strong>Compare with prior run</strong><small>Highlight what changed instead of repeating the same summary.</small></span>
+            <Switch checked={comparePrevious} onChange={setComparePrevious} />
           </div>
-        )}
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onPressEnter={handleSend}
-          placeholder="Ask a question about your data..."
-          disabled={loading}
-          size="large"
-          style={{ background: "#1a1a1a" }}
-        />
-        <Button
-          type="primary"
-          icon={<SendOutlined />}
-          onClick={handleSend}
-          loading={loading}
-          size="large"
-        />
-      </div>
+          {cadence !== "manual" && (
+            <div className="scheduler-note"><ClockCircleOutlined /> Cadence is saved with the task. Automatic scheduling remains off until a scheduler is connected.</div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

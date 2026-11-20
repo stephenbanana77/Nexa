@@ -58,8 +58,19 @@ def test_chat_to_workflow(client, auth_headers, project_id):
         "sql": "SELECT * FROM data LIMIT 5",
         "charts": [],
         "insight": "Top 5 items shown",
+        "task_config": {
+            "name": "Weekly top products",
+            "cadence": "weekly",
+            "compare_previous": True,
+            "delivery": "report",
+        },
     }, headers=auth_headers)
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
-    assert "Chat:" in data["name"]
+    assert data["name"] == "Weekly top products"
+
+    detail = client.get(f"/api/workflows/detail/{data['id']}", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["inputs"]["task"]["cadence"] == "weekly"
+    assert detail.json()["inputs"]["task"]["compare_previous"] is True

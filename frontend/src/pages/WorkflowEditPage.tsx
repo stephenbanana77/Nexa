@@ -38,6 +38,7 @@ export default function WorkflowEditPage() {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
   const [name, setName] = useState("");
   const [description, setDesc] = useState("");
   const [steps, setSteps] = useState<Step[]>([]);
@@ -104,11 +105,41 @@ export default function WorkflowEditPage() {
 
   const handleRun = async () => {
     if (!workflowId) return;
+    setRunning(true);
     try {
-      await api.post(`/api/workflows/${workflowId}/run`);
-      message.info("Workflow run started");
-    } catch {
-      message.error("Failed to run");
+      const response = await fetch(`/api/workflows/${workflowId}/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("nexa_token")}` },
+      });
+      if (!response.ok) throw new Error(`Run request failed (${response.status})`);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalStatus = "complete";
+      let finalError = "";
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.event === "workflow_done") {
+              finalStatus = event.status;
+              finalError = event.error || "";
+            }
+          } catch {}
+        }
+      }
+      if (finalStatus === "complete") message.success("Task run completed. Open Audit to review the evidence.");
+      else message.error(`Task stopped with a partial result${finalError ? `: ${finalError}` : ""}`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Failed to run");
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -117,7 +148,7 @@ export default function WorkflowEditPage() {
 
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%", maxWidth: 800 }}>
-      <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/project/${projectId}/workflows`)}
+      <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/project/${projectId}?tab=workflows`)}
         style={{ color: "#888", marginBottom: 16 }}>
         Back to Workflows
       </Button>
@@ -133,7 +164,7 @@ export default function WorkflowEditPage() {
           placeholder="Workflow name"
         />
         <div style={{ display: "flex", gap: 8 }}>
-          <Button icon={<PlayCircleOutlined />} onClick={handleRun}>Run</Button>
+          <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running}>Run</Button>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}
             danger={isDirty}
           >{isDirty ? "Save*" : "Save"}</Button>

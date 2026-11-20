@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Modal, Input, message, Tag } from "antd";
-import { PlusOutlined, LogoutOutlined, SearchOutlined } from "@ant-design/icons";
+import { Button, Input, Modal, Select, message } from "antd";
+import {
+  ArrowRightOutlined,
+  CalendarOutlined,
+  DatabaseOutlined,
+  FileDoneOutlined,
+  LogoutOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
 import { useAuthStore } from "../stores/auth";
 import api from "../api/client";
-
-interface SearchResult {
-  type: string;
-  title: string;
-  subtitle?: string;
-  link: string;
-}
+import "./HomePage.css";
 
 interface Project {
   id: string;
@@ -18,45 +20,40 @@ interface Project {
   created_at: string;
 }
 
+const taskExamples = [
+  {
+    title: "Weekly business review",
+    text: "Every week, compare sales and profit with the previous period, explain the largest changes, and prepare a report for the business owner.",
+  },
+  {
+    title: "Data quality watch",
+    text: "Check each new file for missing values, duplicate orders, schema changes, and suspicious negative amounts. Tell me what blocks publication.",
+  },
+  {
+    title: "Campaign performance",
+    text: "Review campaign spend, conversions, and ROI by channel. Find underperforming campaigns and show the evidence behind each recommendation.",
+  },
+];
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [taskBrief, setTaskBrief] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>();
+  const [searchQuery, setSearchQuery] = useState("");
   const { logout } = useAuthStore();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-
-  const createSampleProject = async () => {
-    setLoading(true);
-    try {
-      const existing = projects.find((p: Project) => p.name === "Sample - Superstore Demo");
-      if (existing) {
-        navigate(`/project/${existing.id}`);
-        return;
-      }
-      const { data } = await api.post("/api/demo/superstore");
-      message.success(data.reused ? "Opened existing Superstore demo" : "Demo project created with dataset, semantic layer, and report");
-      navigate(`/project/${data.project?.id || data.project_id}?tab=reports`);
-    } catch { message.error("Failed to create sample project"); }
-    finally { setLoading(false); }
-  };
-
-  const doSearch = async (q: string) => {
-    if (!q.trim()) { setSearchResults([]); return; }
-    try {
-      const { data } = await api.get(`/api/search?q=${encodeURIComponent(q)}`);
-      setSearchResults(data.results || []);
-    } catch { setSearchResults([]); }
-  };
 
   const fetchProjects = async () => {
     try {
       const { data } = await api.get("/api/projects");
-      setProjects(data.items || data);
+      const list = data.items || data;
+      setProjects(list);
+      if (list.length > 0) setSelectedProjectId((current) => current || list[0].id);
     } catch {
-      message.error("Failed to load projects");
+      message.error("Projects could not be loaded");
     }
   };
 
@@ -64,138 +61,198 @@ export default function HomePage() {
     fetchProjects();
   }, []);
 
+  const visibleProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return projects;
+    return projects.filter((project) => project.name.toLowerCase().includes(query));
+  }, [projects, searchQuery]);
+
+  const openTask = (brief = taskBrief) => {
+    if (!brief.trim()) {
+      message.info("Describe the data work you want the agent to take over");
+      return;
+    }
+    if (!selectedProjectId) {
+      setModalOpen(true);
+      return;
+    }
+    navigate(`/project/${selectedProjectId}?tab=chat&question=${encodeURIComponent(brief.trim())}`);
+  };
+
   const createProject = async () => {
     if (!newName.trim()) return;
     setLoading(true);
     try {
-      const { data } = await api.post("/api/projects", { name: newName });
+      const { data } = await api.post("/api/projects", { name: newName.trim() });
       setProjects((prev) => [data, ...prev]);
+      setSelectedProjectId(data.id);
       setModalOpen(false);
       setNewName("");
+      if (taskBrief.trim()) {
+        navigate(`/project/${data.id}?tab=chat&question=${encodeURIComponent(taskBrief.trim())}`);
+      } else {
+        navigate(`/project/${data.id}?tab=data`);
+      }
     } catch {
-      message.error("Failed to create project");
+      message.error("Project could not be created");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createSampleProject = async () => {
+    setLoading(true);
+    try {
+      const existing = projects.find((project) => project.name === "Sample - Superstore Demo");
+      if (existing) {
+        setSelectedProjectId(existing.id);
+        navigate(`/project/${existing.id}?tab=chat`);
+        return;
+      }
+      const { data } = await api.post("/api/demo/superstore");
+      const projectId = data.project?.id || data.project_id;
+      message.success("Demo workspace is ready");
+      navigate(`/project/${projectId}?tab=chat`);
+    } catch {
+      message.error("Demo workspace could not be created");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d0d0d", padding: 40 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 600, color: "#fff", margin: 0 }}>Nexa</h1>
-            <p style={{ color: "#888", margin: "4px 0 0" }}>Your AI Data Analyst</p>
-          </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-              New Project
-            </Button>
-            <Button icon={<LogoutOutlined />} onClick={logout}>
-              Logout
-            </Button>
-          </div>
+    <main className="home-shell">
+      <header className="home-header">
+        <button className="wordmark" type="button" onClick={() => navigate("/")}>
+          <span className="wordmark-signal" />
+          Nexa
+        </button>
+        <div className="home-header-actions">
+          <Button icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>New workspace</Button>
+          <Button type="text" icon={<LogoutOutlined />} onClick={logout} aria-label="Log out" />
+        </div>
+      </header>
+
+      <section className="task-composer" aria-labelledby="task-heading">
+        <div className="task-composer-copy">
+          <h1 id="task-heading">What data work should Nexa take over?</h1>
+          <p>Describe the recurring decision, not the chart. Nexa runs the analysis, keeps the evidence, and turns it into a reusable task.</p>
         </div>
 
-        <div style={{ marginBottom: 24 }}>
-          <Input
-            prefix={<SearchOutlined style={{ color: "#888" }} />}
-            placeholder="Search projects, insights, datasets..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); doSearch(e.target.value); }}
-            allowClear
-            size="large"
-            style={{ background: "#1a1a1a", fontSize: 18 }}
+        <div className="task-input-frame">
+          <Input.TextArea
+            value={taskBrief}
+            onChange={(event) => setTaskBrief(event.target.value)}
+            placeholder="Example: Every Monday, compare sales and profit with last week. Explain material changes and prepare a report for the regional leads."
+            autoSize={{ minRows: 4, maxRows: 8 }}
+            onPressEnter={(event) => {
+              if ((event.metaKey || event.ctrlKey) && taskBrief.trim()) openTask();
+            }}
           />
-          {searchResults.length > 0 && (
-            <div style={{ marginTop: 12, background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: 8 }}>
-              {searchResults.map((r, i) => (
-                <div
-                  key={i}
-                  onClick={() => navigate(r.link)}
-                  style={{
-                    padding: "8px 12px", cursor: "pointer", borderRadius: 6,
-                    display: "flex", alignItems: "center", gap: 8,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#252525")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <Tag color={r.type === "project" ? "blue" : r.type === "insight" ? "green" : r.type === "workflow" ? "orange" : "default"} style={{ margin: 0 }}>
-                    {r.type}
-                  </Tag>
-                  <span style={{ color: "#ddd", fontSize: 17 }}>{r.title}</span>
-                  {r.subtitle && <span style={{ color: "#888", fontSize: 15 }}>{r.subtitle}</span>}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="task-input-toolbar">
+            <Select
+              value={selectedProjectId}
+              onChange={setSelectedProjectId}
+              placeholder="Choose workspace"
+              options={projects.map((project) => ({ value: project.id, label: project.name }))}
+              className="workspace-select"
+            />
+            <Button
+              type="primary"
+              icon={<ArrowRightOutlined />}
+              iconPosition="end"
+              onClick={() => openTask()}
+              disabled={!taskBrief.trim()}
+            >
+              Work with agent
+            </Button>
+          </div>
         </div>
 
-        {projects.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 0" }}>
-            <h2 style={{ color: "#ddd", fontSize: 22, marginBottom: 8 }}>Welcome to Nexa</h2>
-            <p style={{ color: "#888", fontSize: 16, marginBottom: 24 }}>
-              Upload a CSV or Excel file and ask questions in plain English.
-            </p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <Button type="primary" size="large" onClick={() => setModalOpen(true)}>Upload Your Data</Button>
-              <Button size="large" onClick={createSampleProject} loading={loading}>Try Superstore Demo</Button>
+        <div className="task-examples" aria-label="Example data tasks">
+          {taskExamples.map((example) => (
+            <button
+              type="button"
+              key={example.title}
+              className="task-example"
+              onClick={() => {
+                setTaskBrief(example.text);
+                openTask(example.text);
+              }}
+            >
+              <strong>{example.title}</strong>
+              <span>{example.text}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="workspace-section">
+        <div className="workspace-section-heading">
+          <div>
+            <h2>Workspaces</h2>
+            <p>Data, recurring tasks, evidence, and deliverables stay together.</p>
+          </div>
+          <Input
+            prefix={<SearchOutlined />}
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Find a workspace"
+            allowClear
+            className="workspace-search"
+          />
+        </div>
+
+        {visibleProjects.length === 0 ? (
+          <div className="workspace-empty">
+            <DatabaseOutlined />
+            <div>
+              <strong>No workspace yet</strong>
+              <span>Create one for your own data or open a working demo.</span>
             </div>
+            <Button type="primary" onClick={() => setModalOpen(true)}>Create workspace</Button>
+            <Button onClick={createSampleProject} loading={loading}>Open demo</Button>
+          </div>
+        ) : (
+          <div className="workspace-list">
+            {visibleProjects.map((project) => (
+              <button
+                type="button"
+                className="workspace-row"
+                key={project.id}
+                onClick={() => navigate(`/project/${project.id}?tab=chat`)}
+              >
+                <span className="workspace-icon"><DatabaseOutlined /></span>
+                <span className="workspace-name">
+                  <strong>{project.name}</strong>
+                  <small>Created {new Date(project.created_at).toLocaleDateString()}</small>
+                </span>
+                <span className="workspace-capability"><CalendarOutlined /> Repeatable tasks</span>
+                <span className="workspace-capability"><FileDoneOutlined /> Evidence-backed reports</span>
+                <ArrowRightOutlined className="workspace-arrow" />
+              </button>
+            ))}
           </div>
         )}
-
-        {projects.length > 0 && <h2 style={{ color: "#aaa", fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Recent Projects</h2>}
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-          {projects.map((p) => (
-            <Card
-              key={p.id}
-              hoverable
-              onClick={() => navigate(`/project/${p.id}`)}
-              style={{ background: "#1a1a1a", border: "1px solid #333", cursor: "pointer" }}
-              styles={{ body: { padding: 20 } }}
-            >
-              <div style={{ fontWeight: 500, fontSize: 17, color: "#ddd", marginBottom: 4 }}>{p.name}</div>
-              <div style={{ fontSize: 16, color: "#888" }}>
-                Created {new Date(p.created_at).toLocaleDateString()}
-              </div>
-            </Card>
-          ))}
-          <Card
-            hoverable
-            onClick={() => setModalOpen(true)}
-            style={{
-              background: "#1a1a1a",
-              border: "1px dashed #444",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: 100,
-            }}
-            styles={{ body: { padding: 20, width: "100%", textAlign: "center" } }}
-          >
-            <PlusOutlined style={{ fontSize: 24, color: "#555" }} />
-            <div style={{ color: "#666", marginTop: 8, fontSize: 16 }}>Create Project</div>
-          </Card>
-        </div>
-      </div>
+      </section>
 
       <Modal
-        title="New Project"
+        title="Create workspace"
         open={modalOpen}
         onOk={createProject}
         onCancel={() => setModalOpen(false)}
         confirmLoading={loading}
+        okText="Create"
       >
+        <p className="modal-helper">Use one workspace for data sources, analysis tasks, and reports that share the same business context.</p>
         <Input
-          placeholder="Project name"
+          placeholder="Workspace name"
           value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          onChange={(event) => setNewName(event.target.value)}
           onPressEnter={createProject}
-          size="large"
+          autoFocus
         />
       </Modal>
-    </div>
+    </main>
   );
 }
