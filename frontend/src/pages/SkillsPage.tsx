@@ -4,9 +4,9 @@ import { Row, Col, Spin } from "antd";
 import { skillService } from "../services";
 import SkillCard from "../components/SkillCard";
 import SkillExecutionModal from "../components/SkillExecutionModal";
-import { tokens } from "../theme";
 import type { Skill, Dataset } from "../types";
 import api from "../api/client";
+import "./SkillsPage.css";
 
 export default function SkillsPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -35,20 +35,21 @@ export default function SkillsPage() {
   };
 
   return (
-    <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
-      <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>
-        技能
-      </h2>
-      <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, marginTop: 4 }}>
-        预置的数据分析流程，选择后即可在自己的数据上运行
-      </p>
+    <main className="skills-page">
+      <header className="skills-page-header">
+        <div>
+          <h1>技能</h1>
+          <p>在当前工作区的数据上运行预置分析流程</p>
+        </div>
+        {!loading && <span className="skills-count">{skills.length} 个可用技能</span>}
+      </header>
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>
+        <div className="skills-loading"><Spin /></div>
       ) : (
-        <Row gutter={[16, 16]} style={{ marginTop: tokens.spacing.lg }}>
+        <Row gutter={[12, 12]} className="skills-grid">
           {skills.map((skill) => (
-            <Col key={skill.name} xs={24} sm={12} md={8}>
+            <Col key={skill.name} xs={24} md={12}>
               <SkillCard skill={skill} onRun={handleRun} />
             </Col>
           ))}
@@ -62,6 +63,6 @@ export default function SkillsPage() {
         open={showModal}
         onClose={() => setShowModal(false)}
       />
-    </div>
+    </main>
   );
 }

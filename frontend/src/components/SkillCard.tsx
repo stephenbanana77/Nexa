@@ -1,7 +1,7 @@
 import { Button, Tag } from "antd";
 import {
   BarChartOutlined, DotChartOutlined, TrophyOutlined,
-  LineChartOutlined, ExperimentOutlined,
+  LineChartOutlined, ExperimentOutlined, PlayCircleOutlined,
 } from "@ant-design/icons";
 import { tokens } from "../theme";
 import type { Skill } from "../types";
@@ -40,39 +40,72 @@ export default function SkillCard({ skill, onRun }: Props) {
     <div
       style={{
         background: tokens.color.bg.card,
-        borderRadius: tokens.radius.lg,
-        border: `0.5px solid ${tokens.color.border.default}`,
-        padding: tokens.spacing.xxl,
+        borderRadius: tokens.radius.md,
+        border: `1px solid ${tokens.color.border.light}`,
+        padding: 18,
         display: "flex",
         flexDirection: "column",
-        gap: tokens.spacing.md,
-        transition: "border-color 0.2s",
+        gap: 14,
+        height: "100%",
+        minHeight: 156,
+        transition: "border-color 0.15s ease, background-color 0.15s ease",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = catColor)}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = tokens.color.border.default)}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = tokens.color.border.default;
+        e.currentTarget.style.backgroundColor = tokens.color.bg.elevated;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = tokens.color.border.light;
+        e.currentTarget.style.backgroundColor = tokens.color.bg.card;
+      }}
     >
-      <div style={{ fontSize: 28, color: catColor }}>
-        {iconMap[skill.icon] || <ExperimentOutlined />}
-      </div>
-      <div>
-        <div style={{ fontSize: tokens.fontSize.lg, fontWeight: 600, color: tokens.color.text.primary }}>
-          {skill.title}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div style={{
+          width: 34,
+          height: 34,
+          borderRadius: tokens.radius.md,
+          display: "grid",
+          placeItems: "center",
+          flex: "0 0 auto",
+          fontSize: 18,
+          color: catColor,
+          background: `${catColor}14`,
+          border: `1px solid ${catColor}30`,
+        }}>
+          {iconMap[skill.icon] || <ExperimentOutlined />}
         </div>
-        <Tag color={catColor} style={{ marginTop: 4, fontSize: 16 }}>
-          {categoryLabels[skill.category] || skill.category}
-        </Tag>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 16, lineHeight: 1.35, fontWeight: 600, color: tokens.color.text.primary }}>
+            {skill.title}
+          </div>
+          <Tag
+            color={catColor}
+            style={{ margin: "4px 0 0", fontSize: 11, lineHeight: "18px", paddingInline: 6 }}
+          >
+            {categoryLabels[skill.category] || skill.category}
+          </Tag>
+        </div>
+        <Button
+          type="text"
+          size="small"
+          icon={<PlayCircleOutlined />}
+          onClick={() => onRun(skill)}
+          style={{ flex: "0 0 auto", color: tokens.color.text.secondary }}
+        >
+          运行
+        </Button>
       </div>
-      <div style={{ fontSize: tokens.fontSize.sm, color: tokens.color.text.muted, lineHeight: 1.5, flex: 1 }}>
+      <div style={{
+        fontSize: 14,
+        color: tokens.color.text.tertiary,
+        lineHeight: 1.6,
+        display: "-webkit-box",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: 2,
+        overflow: "hidden",
+      }}>
         {skill.description}
       </div>
-      <Button
-        type="primary"
-        size="small"
-        onClick={() => onRun(skill)}
-        style={{ alignSelf: "flex-start" }}
-      >
-        运行
-      </Button>
     </div>
   );
 }
