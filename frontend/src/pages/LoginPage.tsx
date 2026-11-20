@@ -21,8 +21,8 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : "Something went wrong";
-      message.error(msg || "Something went wrong");
+        : "操作失败，请稍后重试";
+      message.error(msg || "操作失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -44,41 +44,41 @@ export default function LoginPage() {
       >
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <h1 style={{ fontSize: 32, fontWeight: 700, color: "#fff", margin: 0 }}>Nexa</h1>
-          <p style={{ color: "#888", margin: "8px 0 0", fontSize: 18 }}>Your AI Data Analyst</p>
+          <p style={{ color: "#888", margin: "8px 0 0", fontSize: 18 }}>你的 AI 数据工作台</p>
         </div>
         <Tabs
           centered
           items={[
             {
               key: "login",
-              label: "Sign In",
+              label: "登录",
               children: (
                 <Form onFinish={(v) => handleSubmit(v, "login")} layout="vertical">
                   <Form.Item name="email" rules={[{ required: true, type: "email" }]}>
-                    <Input prefix={<MailOutlined />} placeholder="Email" size="large" />
+                    <Input prefix={<MailOutlined />} placeholder="邮箱" size="large" />
                   </Form.Item>
                   <Form.Item name="password" rules={[{ required: true, min: 6 }]}>
-                    <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" />
+                    <Input.Password prefix={<LockOutlined />} placeholder="密码" size="large" />
                   </Form.Item>
                   <Button type="primary" htmlType="submit" loading={loading} block size="large">
-                    Sign In
+                    登录
                   </Button>
                 </Form>
               ),
             },
             {
               key: "register",
-              label: "Register",
+              label: "注册",
               children: (
                 <Form onFinish={(v) => handleSubmit(v, "register")} layout="vertical">
                   <Form.Item name="email" rules={[{ required: true, type: "email" }]}>
-                    <Input prefix={<MailOutlined />} placeholder="Email" size="large" />
+                    <Input prefix={<MailOutlined />} placeholder="邮箱" size="large" />
                   </Form.Item>
                   <Form.Item name="password" rules={[{ required: true, min: 6 }]}>
-                    <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" />
+                    <Input.Password prefix={<LockOutlined />} placeholder="密码（至少 6 位）" size="large" />
                   </Form.Item>
                   <Button type="primary" htmlType="submit" loading={loading} block size="large">
-                    Create Account
+                    创建账号
                   </Button>
                 </Form>
               ),

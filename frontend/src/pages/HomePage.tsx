@@ -22,16 +22,16 @@ interface Project {
 
 const taskExamples = [
   {
-    title: "Weekly business review",
-    text: "Every week, compare sales and profit with the previous period, explain the largest changes, and prepare a report for the business owner.",
+    title: "每周经营复盘",
+    text: "每周对比销售额和利润与上一周期的变化，解释波动最大的部分，并为业务负责人准备一份报告。",
   },
   {
-    title: "Data quality watch",
-    text: "Check each new file for missing values, duplicate orders, schema changes, and suspicious negative amounts. Tell me what blocks publication.",
+    title: "数据质量监控",
+    text: "检查每个新文件中的缺失值、重复订单、字段变化和异常负数，并告诉我哪些问题会阻止报告发布。",
   },
   {
-    title: "Campaign performance",
-    text: "Review campaign spend, conversions, and ROI by channel. Find underperforming campaigns and show the evidence behind each recommendation.",
+    title: "营销活动分析",
+    text: "按渠道分析活动花费、转化和 ROI，找出表现不佳的活动，并展示每项建议背后的数据证据。",
   },
 ];
 
@@ -53,7 +53,7 @@ export default function HomePage() {
       setProjects(list);
       if (list.length > 0) setSelectedProjectId((current) => current || list[0].id);
     } catch {
-      message.error("Projects could not be loaded");
+      message.error("工作区加载失败，请刷新页面重试");
     }
   };
 
@@ -69,7 +69,7 @@ export default function HomePage() {
 
   const openTask = (brief = taskBrief) => {
     if (!brief.trim()) {
-      message.info("Describe the data work you want the agent to take over");
+      message.info("请先描述希望 Agent 接管的数据工作");
       return;
     }
     if (!selectedProjectId) {
@@ -94,7 +94,7 @@ export default function HomePage() {
         navigate(`/project/${data.id}?tab=data`);
       }
     } catch {
-      message.error("Project could not be created");
+      message.error("工作区创建失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -111,10 +111,10 @@ export default function HomePage() {
       }
       const { data } = await api.post("/api/demo/superstore");
       const projectId = data.project?.id || data.project_id;
-      message.success("Demo workspace is ready");
+      message.success("演示工作区已准备好");
       navigate(`/project/${projectId}?tab=chat`);
     } catch {
-      message.error("Demo workspace could not be created");
+      message.error("演示工作区创建失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -128,22 +128,22 @@ export default function HomePage() {
           Nexa
         </button>
         <div className="home-header-actions">
-          <Button icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>New workspace</Button>
-          <Button type="text" icon={<LogoutOutlined />} onClick={logout} aria-label="Log out" />
+          <Button icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建工作区</Button>
+          <Button type="text" icon={<LogoutOutlined />} onClick={logout} aria-label="退出登录" title="退出登录" />
         </div>
       </header>
 
       <section className="task-composer" aria-labelledby="task-heading">
         <div className="task-composer-copy">
-          <h1 id="task-heading">What data work should Nexa take over?</h1>
-          <p>Describe the recurring decision, not the chart. Nexa runs the analysis, keeps the evidence, and turns it into a reusable task.</p>
+          <h1 id="task-heading">想让 Nexa 接管什么数据工作？</h1>
+          <p>描述需要反复完成的业务判断，不必指定图表。Nexa 会执行分析、保留证据，并把它沉淀为可重复任务。</p>
         </div>
 
         <div className="task-input-frame">
           <Input.TextArea
             value={taskBrief}
             onChange={(event) => setTaskBrief(event.target.value)}
-            placeholder="Example: Every Monday, compare sales and profit with last week. Explain material changes and prepare a report for the regional leads."
+            placeholder="例如：每周一对比销售额和利润与上周的变化，解释重要波动，并为各区域负责人准备报告。"
             autoSize={{ minRows: 4, maxRows: 8 }}
             onPressEnter={(event) => {
               if ((event.metaKey || event.ctrlKey) && taskBrief.trim()) openTask();
@@ -153,8 +153,8 @@ export default function HomePage() {
             <Select
               value={selectedProjectId}
               onChange={setSelectedProjectId}
-              placeholder="Choose workspace"
-              options={projects.map((project) => ({ value: project.id, label: project.name }))}
+              placeholder="选择工作区"
+              options={projects.map((project) => ({ value: project.id, label: project.name === "Sample - Superstore Demo" ? "示例 - Superstore 演示" : project.name }))}
               className="workspace-select"
             />
             <Button
@@ -164,12 +164,12 @@ export default function HomePage() {
               onClick={() => openTask()}
               disabled={!taskBrief.trim()}
             >
-              Work with agent
+              交给 Agent
             </Button>
           </div>
         </div>
 
-        <div className="task-examples" aria-label="Example data tasks">
+        <div className="task-examples" aria-label="数据任务示例">
           {taskExamples.map((example) => (
             <button
               type="button"
@@ -190,14 +190,14 @@ export default function HomePage() {
       <section className="workspace-section">
         <div className="workspace-section-heading">
           <div>
-            <h2>Workspaces</h2>
-            <p>Data, recurring tasks, evidence, and deliverables stay together.</p>
+            <h2>工作区</h2>
+            <p>把数据、重复任务、证据和交付物放在同一个业务上下文中。</p>
           </div>
           <Input
             prefix={<SearchOutlined />}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Find a workspace"
+            placeholder="搜索工作区"
             allowClear
             className="workspace-search"
           />
@@ -207,11 +207,11 @@ export default function HomePage() {
           <div className="workspace-empty">
             <DatabaseOutlined />
             <div>
-              <strong>No workspace yet</strong>
-              <span>Create one for your own data or open a working demo.</span>
+              <strong>还没有工作区</strong>
+              <span>为自己的数据创建工作区，或先打开可用的演示项目。</span>
             </div>
-            <Button type="primary" onClick={() => setModalOpen(true)}>Create workspace</Button>
-            <Button onClick={createSampleProject} loading={loading}>Open demo</Button>
+            <Button type="primary" onClick={() => setModalOpen(true)}>创建工作区</Button>
+            <Button onClick={createSampleProject} loading={loading}>打开演示</Button>
           </div>
         ) : (
           <div className="workspace-list">
@@ -224,11 +224,11 @@ export default function HomePage() {
               >
                 <span className="workspace-icon"><DatabaseOutlined /></span>
                 <span className="workspace-name">
-                  <strong>{project.name}</strong>
-                  <small>Created {new Date(project.created_at).toLocaleDateString()}</small>
+                  <strong>{project.name === "Sample - Superstore Demo" ? "示例 - Superstore 演示" : project.name}</strong>
+                  <small>创建于 {new Date(project.created_at).toLocaleDateString("zh-CN")}</small>
                 </span>
-                <span className="workspace-capability"><CalendarOutlined /> Repeatable tasks</span>
-                <span className="workspace-capability"><FileDoneOutlined /> Evidence-backed reports</span>
+                <span className="workspace-capability"><CalendarOutlined /> 可重复任务</span>
+                <span className="workspace-capability"><FileDoneOutlined /> 有证据的报告</span>
                 <ArrowRightOutlined className="workspace-arrow" />
               </button>
             ))}
@@ -237,16 +237,16 @@ export default function HomePage() {
       </section>
 
       <Modal
-        title="Create workspace"
+        title="创建工作区"
         open={modalOpen}
         onOk={createProject}
         onCancel={() => setModalOpen(false)}
         confirmLoading={loading}
-        okText="Create"
+        okText="创建"
       >
-        <p className="modal-helper">Use one workspace for data sources, analysis tasks, and reports that share the same business context.</p>
+        <p className="modal-helper">同一业务场景的数据源、分析任务和报告，建议放在一个工作区中。</p>
         <Input
-          placeholder="Workspace name"
+          placeholder="工作区名称"
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
           onPressEnter={createProject}

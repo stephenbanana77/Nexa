@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ConfigProvider, Spin, theme } from "antd";
+import zhCN from "antd/locale/zh_CN";
 import { useAuthStore } from "./stores/auth";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -29,7 +30,8 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function App() {
   return (
-    <ConfigProvider
+      <ConfigProvider
+        locale={zhCN}
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {

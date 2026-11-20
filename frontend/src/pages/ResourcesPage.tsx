@@ -36,6 +36,11 @@ const typeIcons: Record<string, string> = {
   notebook: "\ud83d\udcd3", workflow: "\u2699\ufe0f", connection: "\ud83d\udd17",
 };
 
+const typeLabels: Record<string, string> = {
+  dataset: "数据集", chart: "图表", insight: "洞察",
+  notebook: "分析笔记", workflow: "工作流", connection: "连接",
+};
+
 function rtype(r: ResourceItem) {
   return r.type || r.resource_type || "unknown";
 }
@@ -81,13 +86,13 @@ export default function ResourcesPage() {
 
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
-      <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>Resources</h2>
+      <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>资源血缘</h2>
       <p style={{ color: tokens.color.text.muted, marginTop: 4, marginBottom: tokens.spacing.lg }}>
-        Click a resource to explore its lineage — upstream data sources and downstream consumers.
+        选择一项资源，查看它的上游数据来源和下游使用方。
       </p>
 
       {resources.length === 0 ? (
-        <Empty description="No resources yet. Upload data or run an analysis." />
+        <Empty description="还没有资源，请先上传数据或运行一次分析。" />
       ) : (
         <Table
           dataSource={resources}
@@ -101,19 +106,19 @@ export default function ResourcesPage() {
           })}
           columns={[
             {
-              title: "Type", dataIndex: "resource_type", key: "type",
-              render: (t: string) => <Tag color={typeColors[t] || "default"}>{t}</Tag>,
+              title: "类型", dataIndex: "resource_type", key: "type",
+              render: (t: string) => <Tag color={typeColors[t] || "default"}>{typeLabels[t] || t}</Tag>,
               width: 100,
             },
-            { title: "Name", dataIndex: "name", key: "name", ellipsis: true },
+            { title: "名称", dataIndex: "name", key: "name", ellipsis: true },
             {
               title: "URI", dataIndex: "uri", key: "uri",
               render: (u: string) => <Text code style={{ fontSize: 14 }}>{u}</Text>,
             },
-            { title: "Description", dataIndex: "description", key: "desc", ellipsis: true },
+            { title: "说明", dataIndex: "description", key: "desc", ellipsis: true },
             {
-              title: "Created", dataIndex: "created_at", key: "created",
-              render: (t: string) => t ? new Date(t).toLocaleString() : "-",
+              title: "创建时间", dataIndex: "created_at", key: "created",
+              render: (t: string) => t ? new Date(t).toLocaleString("zh-CN") : "-",
               width: 160,
             },
           ]}
@@ -129,7 +134,7 @@ export default function ResourcesPage() {
           title={
             <span>
               <NodeIndexOutlined style={{ marginRight: 8 }} />
-              Lineage — {lineage?.resource?.name || selected}
+              血缘关系：{lineage?.resource?.name || selected}
             </span>
           }
           extra={<Button type="text" icon={<CloseOutlined />} onClick={closeLineage} />}
@@ -147,10 +152,10 @@ export default function ResourcesPage() {
               <div>
                 <div style={{ fontSize: 14, color: "#60a5fa", marginBottom: 8, fontWeight: 600 }}>
                   <LinkOutlined style={{ marginRight: 6 }} />
-                  References (this depends on)
+                  上游依赖
                 </div>
                 {lineage.references.length === 0 ? (
-                  <Text type="secondary" style={{ fontSize: 12 }}>No upstream dependencies</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>没有上游依赖</Text>
                 ) : (
                   lineage.references.map((r) => (
                     <div
@@ -165,7 +170,7 @@ export default function ResourcesPage() {
                       <span style={{ fontSize: 14 }}>{typeIcons[rtype(r)] || "\ud83d\udcc4"}</span>
                       <span style={{ color: "#e6edf3", fontSize: 13, flex: 1 }}>{r.name}</span>
                       <Tag style={{ margin: 0, fontSize: 11 }} color={typeColors[rtype(r)] || "default"}>
-                        {rtype(r)} {r.relation ? `· ${r.relation}` : ""}
+                        {typeLabels[rtype(r)] || rtype(r)} {r.relation ? `· ${r.relation}` : ""}
                       </Tag>
                     </div>
                   ))
@@ -175,10 +180,10 @@ export default function ResourcesPage() {
               <div>
                 <div style={{ fontSize: 14, color: "#22c55e", marginBottom: 8, fontWeight: 600 }}>
                   <LinkOutlined style={{ marginRight: 6 }} />
-                  Referrers (depends on this)
+                  下游使用方
                 </div>
                 {lineage.referrers.length === 0 ? (
-                  <Text type="secondary" style={{ fontSize: 12 }}>No downstream consumers</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>没有下游使用方</Text>
                 ) : (
                   lineage.referrers.map((r) => (
                     <div
@@ -193,7 +198,7 @@ export default function ResourcesPage() {
                       <span style={{ fontSize: 14 }}>{typeIcons[rtype(r)] || "\ud83d\udcc4"}</span>
                       <span style={{ color: "#e6edf3", fontSize: 13, flex: 1 }}>{r.name}</span>
                       <Tag style={{ margin: 0, fontSize: 11 }} color={typeColors[rtype(r)] || "default"}>
-                        {rtype(r)} {r.relation ? `· ${r.relation}` : ""}
+                        {typeLabels[rtype(r)] || rtype(r)} {r.relation ? `· ${r.relation}` : ""}
                       </Tag>
                     </div>
                   ))
@@ -201,7 +206,7 @@ export default function ResourcesPage() {
               </div>
             </div>
           ) : (
-            <Text type="secondary">Could not load lineage information.</Text>
+            <Text type="secondary">血缘信息加载失败，请稍后重试。</Text>
           )}
         </Card>
       )}

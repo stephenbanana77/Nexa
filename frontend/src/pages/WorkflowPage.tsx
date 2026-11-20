@@ -24,27 +24,27 @@ interface WorkflowItem {
 }
 
 const stepLabels: Record<string, string> = {
-  sql: "SQL Query", skill: "Skill", analyze: "Analyze",
-  visualize: "Visualize", insight: "Insight",
+  sql: "SQL 查询", skill: "技能", analyze: "分析",
+  visualize: "可视化", insight: "生成洞察",
 };
 
 const cadenceLabels: Record<string, string> = {
-  manual: "On demand",
-  on_new_data: "When data changes",
-  weekly: "Weekly",
-  monthly: "Monthly",
+  manual: "按需运行",
+  on_new_data: "数据变化时",
+  weekly: "每周",
+  monthly: "每月",
 };
 
 const humanizeRunError = (detail: unknown) => {
-  const text = typeof detail === "string" ? detail : "A workflow step failed";
+  const text = typeof detail === "string" ? detail : "工作流步骤执行失败";
   const normalized = text.toLowerCase();
   if (normalized.includes("authentication") || normalized.includes("401") || normalized.includes("api key")) {
-    return "The analysis step could not use the model connection. Test the credentials in Advanced tools > Provider settings.";
+    return "分析步骤无法连接模型。请在「高级工具 > 模型设置」中测试凭据。";
   }
   if (normalized.includes("no available channel") || normalized.includes("503")) {
-    return "The selected model is unavailable. Choose another model in Provider settings.";
+    return "所选模型当前不可用。请在「模型设置」中更换模型。";
   }
-  if (normalized.includes("timeout")) return "The analysis step exceeded the model deadline.";
+  if (normalized.includes("timeout")) return "分析步骤超过模型响应时限。";
   return text.replace(/\s*\(request_id:[^)]+\)/gi, "");
 };
 
@@ -74,7 +74,7 @@ export default function WorkflowPage() {
   const handleCreate = async () => {
     if (!newName.trim()) return;
     await api.post("/api/workflows", { name: newName, description: newDesc, project_id: projectId });
-    message.success("Workflow created");
+    message.success("自动化任务已创建");
     setCreateModal(false);
     setNewName("");
     setNewDesc("");
@@ -83,7 +83,7 @@ export default function WorkflowPage() {
 
   const handleDelete = async (id: string) => {
     await api.delete(`/api/workflows/${id}`);
-    message.success("Deleted");
+    message.success("已删除");
     loadWorkflows();
   };
 
@@ -97,7 +97,7 @@ export default function WorkflowPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("nexa_token")}` },
       });
-      if (!resp.ok) throw new Error(`Run request failed (${resp.status})`);
+      if (!resp.ok) throw new Error(`运行请求失败（${resp.status}）`);
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -113,7 +113,7 @@ export default function WorkflowPage() {
             if (d.event === "step_start") {
               setRunSteps(prev => [...prev, { type: d.type, status: "process" }]);
             } else if (d.event === "step_done") {
-              const detail = d.insight ? String(d.insight).slice(0, 120) : d.result?.row_count != null ? `${d.result.row_count} rows returned` : "Completed";
+              const detail = d.insight ? String(d.insight).slice(0, 120) : d.result?.row_count != null ? `返回 ${d.result.row_count} 行` : "已完成";
               setRunSteps(prev => prev.map((s, index) => index === prev.length - 1 ? { ...s, status: "finish", detail } : s));
             } else if (d.event === "step_error") {
               const detail = humanizeRunError(d.message);
@@ -130,7 +130,7 @@ export default function WorkflowPage() {
       loadWorkflows();
     } catch (error) {
       setRunStatus("error");
-      setRunError(humanizeRunError(error instanceof Error ? error.message : "Run failed"));
+      setRunError(humanizeRunError(error instanceof Error ? error.message : "运行失败"));
     }
   };
 
@@ -140,18 +140,18 @@ export default function WorkflowPage() {
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>Automations</h2>
+          <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>自动化</h2>
           <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, margin: "4px 0 0" }}>
-            Re-run proven analysis paths when new data arrives
+            新数据到达时，重复执行已经验证过的分析路径
           </p>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModal(true)}>
-          New automation
+          新建自动化
         </Button>
       </div>
 
       {workflows.length === 0 ? (
-        <Empty description="No repeatable tasks yet. Run an Agent task first, then save it as an automation." style={{ marginTop: 40 }} imageStyle={{ filter: "grayscale(0.5)" }} />
+        <Empty description="还没有可重复任务。请先运行一个 Agent 任务，再将它保存为自动化。" style={{ marginTop: 40 }} imageStyle={{ filter: "grayscale(0.5)" }} />
       ) : (
         <div style={{ marginTop: tokens.spacing.lg }}>
           {workflows.map((wf) => (
@@ -167,35 +167,35 @@ export default function WorkflowPage() {
                 <div style={{ flex: 1 }}>
                   <div style={{ color: tokens.color.text.primary, fontWeight: 500 }}>{wf.name}</div>
                   <div style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted, display: "flex", gap: 12, flexWrap: "wrap", marginTop: 3 }}>
-                    <span>{wf.step_count} steps · v{wf.version}</span>
-                    <span><ClockCircleOutlined /> {cadenceLabels[wf.inputs?.task?.cadence || "manual"] || "On demand"}</span>
-                    <span><FileDoneOutlined /> {wf.inputs?.task?.compare_previous ? "Compares prior run" : "Standalone result"}</span>
-                    <span>{wf.last_run_at ? `Last run ${new Date(wf.last_run_at).toLocaleString()}` : "Not run yet"}</span>
+                    <span>{wf.step_count} 个步骤 · v{wf.version}</span>
+                    <span><ClockCircleOutlined /> {cadenceLabels[wf.inputs?.task?.cadence || "manual"] || "按需运行"}</span>
+                    <span><FileDoneOutlined /> {wf.inputs?.task?.compare_previous ? "与上次运行对比" : "独立结果"}</span>
+                    <span>{wf.last_run_at ? `上次运行：${new Date(wf.last_run_at).toLocaleString("zh-CN")}` : "尚未运行"}</span>
                   </div>
                 </div>
                 <Tag color={wf.status === "active" ? "#2563EB" : wf.status === "draft" ? "#d29922" : "#666"}>
-                  {wf.status}
+                  {wf.status === "active" ? "已启用" : wf.status === "draft" ? "草稿" : wf.status}
                 </Tag>
-                <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>Run</Button>
-                <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} />
-                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(wf.id)} />
+                <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handleRun(wf.id)}>运行</Button>
+                <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${projectId}/workflow/${wf.id}`)} aria-label="编辑自动化" title="编辑自动化" />
+                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(wf.id)} aria-label="删除自动化" title="删除自动化" />
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Modal title="New automation" open={createModal} onOk={handleCreate} onCancel={() => setCreateModal(false)}>
-        <Input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 8 }} />
-        <Input.TextArea placeholder="Description" value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2} />
+      <Modal title="新建自动化" open={createModal} onOk={handleCreate} onCancel={() => setCreateModal(false)}>
+        <Input placeholder="名称" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 8 }} />
+        <Input.TextArea placeholder="描述" value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2} />
       </Modal>
 
-      <Modal title="Task run" open={!!runModal} footer={<Button onClick={() => setRunModal(null)} disabled={runStatus === "running"}>Close</Button>} onCancel={() => setRunModal(null)} closable={runStatus !== "running"}>
+      <Modal title="任务运行" open={!!runModal} footer={<Button onClick={() => setRunModal(null)} disabled={runStatus === "running"}>关闭</Button>} onCancel={() => setRunModal(null)} closable={runStatus !== "running"}>
         <div style={{ padding: "10px 12px", marginBottom: 16, borderRadius: 6, background: runStatus === "complete" ? "#18261a" : runStatus === "running" ? "#1d2329" : "#2b1d1a", color: runStatus === "complete" ? "#8fc65a" : runStatus === "running" ? "#9db8d1" : "#f08a67" }}>
-          {runStatus === "running" && "Running the saved analysis path..."}
-          {runStatus === "complete" && "Run completed. Results and evidence are available in Audit."}
-          {runStatus === "partial" && `Run stopped after a partial result. ${runError}`}
-          {runStatus === "error" && `Run could not start. ${runError}`}
+          {runStatus === "running" && "正在执行已保存的分析路径..."}
+          {runStatus === "complete" && "运行完成，可在「审计」中查看结果和证据。"}
+          {runStatus === "partial" && `运行在产生部分结果后停止。${runError}`}
+          {runStatus === "error" && `运行无法启动。${runError}`}
         </div>
         <Steps
           direction="vertical"

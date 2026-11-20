@@ -21,12 +21,12 @@ export default function MySQLConnectModal({ projectId, open, onClose, onConnecte
         project_id: projectId,
         ...values,
       });
-      message.success(`Connected to ${values.database} (${data.tables?.length || 0} tables)`);
+      message.success(`已连接 ${values.database}（${data.tables?.length || 0} 张表）`);
       onConnected(data);
       onClose();
       form.resetFields();
     } catch (err: any) {
-      message.error(err.response?.data?.detail || "Connection failed");
+      message.error(err.response?.data?.detail || "连接失败，请检查地址和凭据后重试");
     } finally {
       setLoading(false);
     }
@@ -34,30 +34,30 @@ export default function MySQLConnectModal({ projectId, open, onClose, onConnecte
 
   return (
     <Modal
-      title="Connect MySQL Database"
+      title="连接 MySQL 数据库"
       open={open}
       onCancel={onClose}
       footer={null}
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={handleConnect}>
-        <Form.Item name="host" label="Host" rules={[{ required: true }]} initialValue="localhost">
+        <Form.Item name="host" label="主机地址" rules={[{ required: true }]} initialValue="localhost">
           <Input placeholder="localhost" />
         </Form.Item>
-        <Form.Item name="port" label="Port" initialValue={3306}>
+        <Form.Item name="port" label="端口" initialValue={3306}>
           <InputNumber min={1} max={65535} style={{ width: "100%" }} />
         </Form.Item>
-        <Form.Item name="user" label="User" rules={[{ required: true }]} initialValue="root">
+        <Form.Item name="user" label="用户名" rules={[{ required: true }]} initialValue="root">
           <Input placeholder="root" />
         </Form.Item>
-        <Form.Item name="password" label="Password">
-          <Input.Password placeholder="Password" />
+        <Form.Item name="password" label="密码">
+          <Input.Password placeholder="数据库密码" />
         </Form.Item>
-        <Form.Item name="database" label="Database" rules={[{ required: true }]}>
+        <Form.Item name="database" label="数据库" rules={[{ required: true }]}>
           <Input placeholder="my_database" />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={loading} block icon={<DatabaseOutlined />}>
-          Connect
+          连接并导入
         </Button>
       </Form>
     </Modal>

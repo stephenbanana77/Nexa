@@ -48,7 +48,8 @@
 }
 @media (max-width: 560px) {
   .home-header { padding: 0 16px; }
-  .home-header-actions .ant-btn:first-child { width: 40px; overflow: hidden; padding: 0; }
+  .home-header-actions .ant-btn:first-child { width: 40px; padding: 0; }
+  .home-header-actions .ant-btn:first-child > span:not(.ant-btn-icon) { display: none; }
   .task-composer { padding: 42px 16px 36px; }
   .task-composer-copy h1 { font-size: 38px; }
   .task-input-toolbar, .workspace-section-heading, .workspace-empty { align-items: stretch; flex-direction: column; }

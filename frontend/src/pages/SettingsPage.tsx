@@ -32,7 +32,7 @@ export default function SettingsPage() {
   }, [form]);
 
   useEffect(() => {
-    load().catch(() => message.error("Failed to load settings"));
+    load().catch(() => message.error("模型设置加载失败，请刷新页面重试"));
   }, [load]);
 
   const provider = Form.useWatch("provider", form);
@@ -50,9 +50,9 @@ export default function SettingsPage() {
       const { data } = await api.put("/api/settings/llm", values);
       setSettings(data);
       form.setFieldValue("api_key", "");
-      message.success("LLM settings saved");
+      message.success("模型设置已保存");
     } catch (err: any) {
-      message.error(err.response?.data?.detail || "Failed to save settings");
+      message.error(err.response?.data?.detail || "模型设置保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }
@@ -62,9 +62,9 @@ export default function SettingsPage() {
     setTesting(true);
     try {
       const { data } = await api.post("/api/settings/llm/test");
-      message.success(`Connection ok: ${data.reply || "OK"}`);
+      message.success(`连接成功：${data.reply || "正常"}`);
     } catch (err: any) {
-      message.error(err.response?.data?.detail || "Connection failed");
+      message.error(err.response?.data?.detail || "连接失败，请检查地址、模型和 API Key");
     } finally {
       setTesting(false);
     }
@@ -74,15 +74,15 @@ export default function SettingsPage() {
 
   return (
     <div style={{ padding: "12px 0", maxWidth: 760 }}>
-      <Card title="LLM Provider Settings">
+      <Card title="模型服务设置">
         <Alert
           type="info"
           showIcon
-          message="Keys are written to local .env and never returned to the browser after saving."
+          message="API Key 会写入本地 .env，保存后不会再返回浏览器。"
           style={{ marginBottom: 20 }}
         />
         <Form form={form} layout="vertical">
-          <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
+          <Form.Item name="provider" label="服务商" rules={[{ required: true }]}>
             <Select
               options={[
                 { label: "DeepSeek", value: "deepseek" },
@@ -92,22 +92,22 @@ export default function SettingsPage() {
           </Form.Item>
           <Space style={{ marginBottom: 16 }}>
             <Tag color={providerStatus?.has_key ? "green" : "orange"}>
-              {providerStatus?.has_key ? "API key configured" : "API key missing"}
+              {providerStatus?.has_key ? "已配置 API Key" : "缺少 API Key"}
             </Tag>
-            {settings && <Tag>Current: {settings.provider} / {settings.model}</Tag>}
+            {settings && <Tag>当前：{settings.provider} / {settings.model}</Tag>}
           </Space>
-          <Form.Item name="base_url" label="Base URL" rules={[{ required: true }]}>
+          <Form.Item name="base_url" label="接口地址" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="model" label="Model" rules={[{ required: true }]}>
+          <Form.Item name="model" label="模型" rules={[{ required: true }]}>
             <Input placeholder="deepseek-chat or kimi-k3" />
           </Form.Item>
           <Form.Item name="api_key" label="API Key">
-            <Input.Password placeholder="Leave blank to keep existing key" />
+            <Input.Password placeholder="留空则保留已有 Key" />
           </Form.Item>
           <Space>
-            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>
-            <Button icon={<ApiOutlined />} loading={testing} onClick={test}>Test current provider</Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>保存</Button>
+            <Button icon={<ApiOutlined />} loading={testing} onClick={test}>测试当前连接</Button>
           </Space>
         </Form>
       </Card>

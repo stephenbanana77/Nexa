@@ -14,11 +14,11 @@ export default function NotFoundPage() {
     }}>
       <Result
         status="404"
-        title="Page Not Found"
-        subTitle="The page you're looking for doesn't exist or has been moved."
+        title="页面不存在"
+        subTitle="你访问的页面不存在，或已被移动。"
         extra={
           <Button type="primary" onClick={() => navigate("/")}>
-            Back to Home
+            返回首页
           </Button>
         }
       />

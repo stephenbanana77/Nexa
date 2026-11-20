@@ -40,18 +40,18 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
       <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>
-        Dashboard
+        数据看板
       </h2>
       <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, marginTop: 4 }}>
-        Auto-generated from your saved insights
+        根据已保存的洞察自动生成
       </p>
 
       {insights.length === 0 ? (
         <Empty
           description={
             <span>
-              No insights yet.<br />
-              Start a chat analysis, then click <b>Save Insight</b> or <b>Generate Dashboard</b>.
+              还没有保存的洞察。<br />
+              请先完成一次 Agent 分析，再保存洞察或生成看板。
             </span>
           }
           style={{ marginTop: 40 }}
@@ -111,8 +111,8 @@ export default function DashboardPage() {
                   </ReactMarkdown>
                 )}
                 <div style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted, marginTop: 4 }}>
-                  {ins.created_at && `Saved ${new Date(ins.created_at).toLocaleString()}`}
-                  {ins.content?.row_count !== undefined && ` · ${ins.content.row_count} rows`}
+                  {ins.created_at && `保存于 ${new Date(ins.created_at).toLocaleString("zh-CN")}`}
+                  {ins.content?.row_count !== undefined && ` · ${ins.content.row_count} 行`}
                 </div>
               </Card>
             ))}

@@ -32,11 +32,11 @@ export default class ErrorBoundary extends Component<Props, State> {
         }}>
           <Result
             status="500"
-            title="Something went wrong"
-            subTitle={this.state.error?.message || "An unexpected error occurred"}
+            title="页面出现错误"
+            subTitle={this.state.error?.message || "发生了意外错误，请刷新页面重试"}
             extra={
               <Button type="primary" onClick={() => window.location.reload()}>
-                Reload Page
+                刷新页面
               </Button>
             }
           />

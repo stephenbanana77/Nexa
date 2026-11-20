@@ -60,7 +60,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
         return next;
       });
     } catch {
-      message.error("Failed to delete cell");
+      message.error("单元格删除失败，请稍后重试");
     }
   };
 
@@ -73,7 +73,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
     try {
       const datasets = await api.get(`/api/datasets?project_id=${projectId}`);
       if ((datasets.data as any[]).length === 0) {
-        message.error("No dataset found");
+        message.error("未找到数据集，请先接入数据");
         return;
       }
       const { data } = await api.post(`/api/datasets/by-id/${(datasets.data as any[])[0].id}/query`, { sql });
@@ -81,8 +81,8 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : "Query failed";
-      message.error(msg || "Query failed");
+        : "查询失败";
+      message.error(msg || "查询失败");
     } finally {
       setLoading((p) => ({ ...p, [cellId]: false }));
     }
@@ -96,8 +96,8 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : "Python execution failed";
-      message.error(msg || "Python execution failed");
+        : "Python 执行失败";
+      message.error(msg || "Python 执行失败");
     } finally {
       setLoading((p) => ({ ...p, [cellId]: false }));
     }
@@ -110,8 +110,8 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   if (!notebookId) {
     return (
       <div style={{ padding: "40px 0", textAlign: "center" }}>
-        <p style={{ color: "#888", marginBottom: 16 }}>No notebooks yet</p>
-        <Button onClick={createNotebook} type="primary">Create Notebook</Button>
+        <p style={{ color: "#888", marginBottom: 16 }}>还没有分析笔记</p>
+        <Button onClick={createNotebook} type="primary">创建分析笔记</Button>
       </div>
     );
   }
@@ -127,20 +127,20 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             onClick={async () => {
               try {
                 const wf = await api.post("/api/workflows", {
-                  name: "Converted from Notebook",
+                  name: "由分析笔记转换",
                   project_id: projectId,
                 });
                 const steps = cells.map((c, i) => {
-                  if (c.cell_type === "sql") return { type: "sql", sort_order: i, config: { sql_template: c.content }, description: "From notebook" };
-                  if (c.cell_type === "python") return { type: "analyze", sort_order: i, config: { prompt: c.content }, description: "Python cell" };
-                  return { type: "insight", sort_order: i, config: { prompt: c.content }, description: "Markdown analysis" };
+                  if (c.cell_type === "sql") return { type: "sql", sort_order: i, config: { sql_template: c.content }, description: "来自分析笔记" };
+                  if (c.cell_type === "python") return { type: "analyze", sort_order: i, config: { prompt: c.content }, description: "Python 单元格" };
+                  return { type: "insight", sort_order: i, config: { prompt: c.content }, description: "Markdown 分析" };
                 });
                 await api.put(`/api/workflows/${wf.data.id}`, { steps });
-                message.success("Converted to Workflow");
+                message.success("已转换为工作流");
                 navigate(`/project/${projectId}/workflow/${wf.data.id}`);
-              } catch { message.error("Failed to convert"); }
+              } catch { message.error("转换失败，请稍后重试"); }
             }}
-          >Save as Workflow</Button>
+          >保存为工作流</Button>
         )}
       </div>
 
@@ -164,7 +164,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                 </span>
                 {cell.cell_type === "markdown" && (
                   <Button size="small" type="text" onClick={() => toggleEdit(cell.id)} style={{ color: "#888", fontSize: 16 }}>
-                    {isEditing ? "Preview" : "Edit"}
+                    {isEditing ? "预览" : "编辑"}
                   </Button>
                 )}
               </div>
@@ -176,7 +176,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                     onClick={() => runSql(cell.id, cell.content)}
                     loading={loading[cell.id]}
                   >
-                    Run
+                    运行
                   </Button>
                 )}
                 {cell.cell_type === "python" && (
@@ -186,14 +186,14 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                     onClick={() => runPython(cell.id, cell.content)}
                     loading={loading[cell.id]}
                   >
-                    Run
+                    运行
                   </Button>
                 )}
                 <Popconfirm
-                  title="Delete this cell?"
+                  title="删除这个单元格？"
                   onConfirm={() => deleteCell(cell.id)}
-                  okText="Delete"
-                  cancelText="Cancel"
+                  okText="删除"
+                  cancelText="取消"
                 >
                   <Button size="small" danger icon={<DeleteOutlined />} />
                 </Popconfirm>
@@ -203,7 +203,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             {/* Content: edit mode or preview */}
             {cell.cell_type === "markdown" && !isEditing ? (
               <div style={{ color: "#ccc", fontSize: 16, lineHeight: 1.6, padding: "4px 0" }}>
-                <ReactMarkdown>{cell.content || "*Empty cell*"}</ReactMarkdown>
+                <ReactMarkdown>{cell.content || "*空单元格*"}</ReactMarkdown>
               </div>
             ) : (
               <textarea
@@ -227,10 +227,10 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
                 }}
                 placeholder={
                   cell.cell_type === "markdown"
-                    ? "Write Markdown..."
+                    ? "输入 Markdown..."
                     : cell.cell_type === "sql"
                     ? "SELECT * FROM ..."
-                    : "# Python code..."
+                    : "# Python 代码..."
                 }
               />
             )}
@@ -239,7 +239,7 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             {sqlResults[cell.id] && (
               <div style={{ marginTop: 8, overflowX: "auto" }}>
                 <div style={{ fontSize: 16, color: "#666", marginBottom: 4 }}>
-                  {sqlResults[cell.id].row_count != null ? `${sqlResults[cell.id].row_count} rows` : ""}
+                  {sqlResults[cell.id].row_count != null ? `${sqlResults[cell.id].row_count} 行` : ""}
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
                   <thead>

@@ -21,6 +21,13 @@ const categoryColors: Record<string, string> = {
   visualization: "#d29922",
 };
 
+const categoryLabels: Record<string, string> = {
+  statistics: "统计分析",
+  analysis: "业务分析",
+  forecast: "趋势预测",
+  visualization: "数据可视化",
+};
+
 interface Props {
   skill: Skill;
   onRun: (skill: Skill) => void;
@@ -52,7 +59,7 @@ export default function SkillCard({ skill, onRun }: Props) {
           {skill.title}
         </div>
         <Tag color={catColor} style={{ marginTop: 4, fontSize: 16 }}>
-          {skill.category}
+          {categoryLabels[skill.category] || skill.category}
         </Tag>
       </div>
       <div style={{ fontSize: tokens.fontSize.sm, color: tokens.color.text.muted, lineHeight: 1.5, flex: 1 }}>
@@ -64,7 +71,7 @@ export default function SkillCard({ skill, onRun }: Props) {
         onClick={() => onRun(skill)}
         style={{ alignSelf: "flex-start" }}
       >
-        Run
+        运行
       </Button>
     </div>
   );

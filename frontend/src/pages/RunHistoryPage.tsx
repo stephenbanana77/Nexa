@@ -82,22 +82,22 @@ const typeIcons: Record<string, React.ReactNode> = {
 };
 
 const typeLabels: Record<string, string> = {
-  chat: "Chat Analysis",
-  skill: "Skill Execution",
-  workflow: "Workflow Run",
+  chat: "对话分析",
+  skill: "技能执行",
+  workflow: "工作流运行",
 };
 
 const stepLabels: Record<string, string> = {
-  understand: "Understand",
-  plan: "Plan",
-  select_skill: "Select Skill",
-  execute_skill: "Execute Skill",
-  sql: "Generate SQL",
-  execute: "Execute Query",
-  analyze: "Analyze",
-  visualize: "Visualize",
-  compose: "Compose",
-  insight: "Insight",
+  understand: "理解任务",
+  plan: "制定计划",
+  select_skill: "选择技能",
+  execute_skill: "执行技能",
+  sql: "生成 SQL",
+  execute: "执行查询",
+  analyze: "分析结果",
+  visualize: "生成可视化",
+  compose: "组织结果",
+  insight: "生成洞察",
 };
 
 export default function RunHistoryPage() {
@@ -131,13 +131,13 @@ export default function RunHistoryPage() {
 
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
-      <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>Run History</h2>
+      <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>运行审计</h2>
       <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, marginTop: 4 }}>
-        Every analysis run, with evidence for the question, SQL, result, and answer.
+        记录每次分析运行的问题、SQL、查询结果和回答，便于追溯证据。
       </p>
 
       {runs.length === 0 ? (
-        <Empty description="No runs yet. Start a chat analysis!" style={{ marginTop: 40 }}
+        <Empty description="还没有运行记录，请先让 Agent 完成一次分析。" style={{ marginTop: 40 }}
           imageStyle={{ filter: "grayscale(0.5)" }} />
       ) : (
         <div style={{ marginTop: tokens.spacing.lg }}>
@@ -204,12 +204,12 @@ function RunSummary({ run }: { run: RunItem }) {
       </div>
       {lineage.final_sql && (
         <Tag color="#1e3a5f" icon={<SafetyCertificateOutlined />}>
-          lineage
+          有证据链
         </Tag>
       )}
       <Tag color={run.status === "done" ? "#2563EB" : run.status === "failed" ? "#dc2626" : "#d29922"}>
         {run.status === "done" ? <CheckCircleOutlined /> : run.status === "failed" ? <CloseCircleOutlined /> : <ClockCircleOutlined />}
-        {" "}{run.status}
+        {" "}{run.status === "done" ? "已完成" : run.status === "failed" ? "失败" : run.status === "running" ? "运行中" : "等待中"}
       </Tag>
       {run.duration_ms && (
         <span style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted }}>
@@ -218,7 +218,7 @@ function RunSummary({ run }: { run: RunItem }) {
       )}
       {run.token_estimate && (
         <span style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted }}>
-          ~{run.token_estimate} tk
+          约 {run.token_estimate} token
         </span>
       )}
     </div>
@@ -229,9 +229,9 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
   if (!lineage || Object.keys(lineage).length === 0) {
     return (
       <section style={{ marginBottom: tokens.spacing.lg }}>
-        <SectionLabel>Evidence Chain</SectionLabel>
+        <SectionLabel>证据链</SectionLabel>
         <div style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.xs }}>
-          No lineage was recorded for this run.
+          本次运行没有记录证据链。
         </div>
       </section>
     );
@@ -239,22 +239,22 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 
   return (
     <section style={{ marginBottom: tokens.spacing.xl }}>
-      <SectionLabel>Evidence Chain</SectionLabel>
+      <SectionLabel>证据链</SectionLabel>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: tokens.spacing.sm }}>
-        <EvidenceField label="Question" value={lineage.question || "Unknown"} />
-        <EvidenceField label="Schema source" value={lineage.schema?.source || "Unknown"} />
-        <EvidenceField label="Schema hash" value={lineage.schema?.sha256?.slice(0, 12) || "None"} mono />
-        <EvidenceField label="Rows returned" value={String(lineage.result?.row_count ?? "Unknown")} />
-        <EvidenceField label="SQL attempts" value={String(lineage.sql_attempts?.length || 0)} />
-        <EvidenceField label="SQL retries" value={String(lineage.sql_retries?.length || 0)} />
-        <EvidenceField label="System retries" value={String(lineage.system_retries?.length || 0)} />
-        <EvidenceField label="Policy" value={lineage.policy_decision?.is_safe ? "Allowed" : lineage.policy_decision ? "Blocked" : "Unknown"} />
-        <EvidenceField label="Timeout" value={lineage.policy_decision?.timeout_sec ? `${lineage.policy_decision.timeout_sec}s` : "Unknown"} />
+        <EvidenceField label="分析问题" value={lineage.question || "未知"} />
+        <EvidenceField label="字段来源" value={lineage.schema?.source || "未知"} />
+        <EvidenceField label="字段摘要" value={lineage.schema?.sha256?.slice(0, 12) || "无"} mono />
+        <EvidenceField label="返回行数" value={String(lineage.result?.row_count ?? "未知")} />
+        <EvidenceField label="SQL 尝试次数" value={String(lineage.sql_attempts?.length || 0)} />
+        <EvidenceField label="SQL 重试次数" value={String(lineage.sql_retries?.length || 0)} />
+        <EvidenceField label="系统重试次数" value={String(lineage.system_retries?.length || 0)} />
+        <EvidenceField label="安全策略" value={lineage.policy_decision?.is_safe ? "允许" : lineage.policy_decision ? "已阻断" : "未知"} />
+        <EvidenceField label="超时时限" value={lineage.policy_decision?.timeout_sec ? `${lineage.policy_decision.timeout_sec} 秒` : "未知"} />
       </div>
 
       {lineage.policy_decision && (
         <div style={{ marginTop: tokens.spacing.md, display: "flex", gap: tokens.spacing.sm, flexWrap: "wrap" }}>
-          {lineage.policy_decision.auto_limit_added && <Tag color="#1e3a5f">LIMIT added</Tag>}
+          {lineage.policy_decision.auto_limit_added && <Tag color="#1e3a5f">已自动添加 LIMIT</Tag>}
           {(lineage.policy_decision.risk_flags || []).map((flag) => (
             <Tag key={flag} color={flag === "select_star" ? "#d29922" : "#444"}>
               {flag.replaceAll("_", " ")}
@@ -266,14 +266,14 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 
       {lineage.final_sql && (
         <div style={{ marginTop: tokens.spacing.md }}>
-          <SmallLabel>Final SQL</SmallLabel>
+          <SmallLabel>最终 SQL</SmallLabel>
           <CodeBlock>{lineage.final_sql}</CodeBlock>
         </div>
       )}
 
       {(lineage.sql_attempts?.length || 0) > 1 && (
         <div style={{ marginTop: tokens.spacing.md }}>
-          <SmallLabel>SQL Attempts</SmallLabel>
+          <SmallLabel>SQL 尝试记录</SmallLabel>
           {lineage.sql_attempts?.map((attempt) => (
             <CodeBlock key={attempt.attempt}>{`#${attempt.attempt} ${attempt.sql || ""}`}</CodeBlock>
           ))}
@@ -282,10 +282,10 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 
       {(lineage.errors?.length || 0) > 0 && (
         <div style={{ marginTop: tokens.spacing.md }}>
-          <SmallLabel>Errors / Retries</SmallLabel>
+          <SmallLabel>错误与重试</SmallLabel>
           {lineage.errors?.map((error, index) => (
             <div key={`${error.attempt || 0}-${index}`} style={{ color: "#f87171", fontSize: tokens.fontSize.xs, marginTop: 4 }}>
-              Attempt {error.attempt || index + 1}: {error.message}
+              第 {error.attempt || index + 1} 次：{error.message}
             </div>
           ))}
         </div>
@@ -293,27 +293,27 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 
       {(lineage.sql_retries?.length || 0) > 0 && (
         <RetryList
-          title="SQL Retries"
+          title="SQL 重试记录"
           items={lineage.sql_retries?.map((retry) => ({
             key: `sql-${retry.attempt}`,
-            text: `Attempt ${retry.attempt || "?"}: ${retry.error || "SQL failed"} -> ${retry.next_action || "retry"}`,
+            text: `第 ${retry.attempt || "?"} 次：${retry.error || "SQL 执行失败"} → ${retry.next_action || "重试"}`,
           })) || []}
         />
       )}
 
       {(lineage.system_retries?.length || 0) > 0 && (
         <RetryList
-          title="System Retries"
+          title="系统重试记录"
           items={lineage.system_retries?.map((retry) => ({
             key: `system-${retry.attempt}`,
-            text: `Attempt ${retry.attempt || "?"}: ${retry.message || "System error"}${retry.will_retry ? " -> retrying" : ""}`,
+            text: `第 ${retry.attempt || "?"} 次：${retry.message || "系统错误"}${retry.will_retry ? " → 正在重试" : ""}`,
           })) || []}
         />
       )}
 
       {(lineage.result?.sample_rows?.length || 0) > 0 && (
         <div style={{ marginTop: tokens.spacing.md }}>
-          <SmallLabel>Sample Result</SmallLabel>
+          <SmallLabel>结果样本</SmallLabel>
           <Table
             size="small"
             pagination={false}
@@ -332,7 +332,7 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 
       {lineage.answer?.summary && (
         <div style={{ marginTop: tokens.spacing.md }}>
-          <SmallLabel>Answer Summary</SmallLabel>
+          <SmallLabel>回答摘要</SmallLabel>
           <div style={{ color: tokens.color.text.secondary, fontSize: tokens.fontSize.xs, lineHeight: 1.6 }}>
             {lineage.answer.summary}
           </div>
@@ -345,7 +345,7 @@ function LineagePanel({ lineage }: { lineage?: RunLineage | null }) {
 function StepTimeline({ steps }: { steps: RunStep[] }) {
   return (
     <section>
-      <SectionLabel>Agent Plan</SectionLabel>
+      <SectionLabel>Agent 执行计划</SectionLabel>
       {steps.map((step) => (
         <div key={step.id} style={{
           display: "flex",

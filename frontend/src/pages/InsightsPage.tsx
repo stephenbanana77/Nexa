@@ -36,7 +36,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     api.get(`/api/insights/project/${projectId}`)
       .then(({ data }) => setInsights(data.items || data))
-      .catch(() => message.error("Failed to load insights"));
+      .catch(() => message.error("洞察加载失败，请刷新页面重试"));
   }, [projectId]);
 
   const handleDelete = async (insightId: string) => {
@@ -45,9 +45,9 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
       await api.delete(`/api/insights/${insightId}`);
       setInsights((prev) => prev.filter((i) => i.id !== insightId));
       if (expanded === insightId) setExpanded(null);
-      message.success("Insight deleted");
+      message.success("洞察已删除");
     } catch {
-      message.error("Failed to delete insight");
+      message.error("洞察删除失败，请稍后重试");
     } finally {
       setDeleting(false);
     }
@@ -62,8 +62,8 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
     return (
       <div style={{ padding: "60px 20px", textAlign: "center" }}>
         <BulbOutlined style={{ fontSize: 36, color: "#444" }} />
-        <p style={{ color: "#888", marginTop: 12, fontSize: 16 }}>No insights yet</p>
-        <p style={{ color: "#666", fontSize: 16 }}>Ask a question in Chat, then save the result here</p>
+        <p style={{ color: "#888", marginTop: 12, fontSize: 16 }}>还没有保存的洞察</p>
+        <p style={{ color: "#666", fontSize: 16 }}>在 Agent 中完成分析后，可将结果保存到这里</p>
       </div>
     );
   }
@@ -90,14 +90,14 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
               </div>
               <div style={{ fontSize: 16, color: "#666" }}>
                 {new Date(insight.created_at).toLocaleString()}
-                {insight.content.row_count && ` · ${insight.content.row_count} rows`}
+                {insight.content.row_count && ` · ${insight.content.row_count} 行`}
               </div>
             </div>
             <Popconfirm
-              title="Delete this insight?"
+              title="删除这条洞察？"
               onConfirm={() => handleDelete(insight.id)}
-              okText="Delete"
-              cancelText="Cancel"
+              okText="删除"
+              cancelText="取消"
             >
               <Button
                 type="text"
@@ -118,7 +118,7 @@ export default function InsightsPage({ projectId }: { projectId: string }) {
               {insight.content.key_findings && insight.content.key_findings.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   <div style={{ color: "#aaa", fontSize: 16, marginBottom: 6, textTransform: "uppercase" }}>
-                    Key Findings
+                    关键发现
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, color: "#ccc", fontSize: 16, lineHeight: 1.7 }}>
                     {insight.content.key_findings.map((f, i) => (

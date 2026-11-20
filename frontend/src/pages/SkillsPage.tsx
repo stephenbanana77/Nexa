@@ -37,10 +37,10 @@ export default function SkillsPage() {
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
       <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>
-        Skills
+        技能
       </h2>
       <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, marginTop: 4 }}>
-        Pre-built analysis pipelines — select one and run on your data
+        预置的数据分析流程，选择后即可在自己的数据上运行
       </p>
 
       {loading ? (

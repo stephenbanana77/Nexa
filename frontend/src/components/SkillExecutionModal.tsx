@@ -19,6 +19,15 @@ interface StepState {
   result?: unknown;
 }
 
+const stepLabels: Record<string, string> = {
+  sql: "SQL 查询",
+  chart: "生成图表",
+  visualize: "生成可视化",
+  insight: "生成洞察",
+  analyze: "分析结果",
+  python: "Python 分析",
+};
+
 export default function SkillExecutionModal({ skill, projectId, datasets, open, onClose }: Props) {
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -93,7 +102,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
         }
       }
     } catch {
-      message.error("Skill execution failed");
+      message.error("技能执行失败，请稍后重试");
     } finally {
       setRunning(false);
     }
@@ -109,7 +118,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
 
   return (
     <Modal
-      title={skill?.title || "Run Skill"}
+      title={skill?.title || "运行技能"}
       open={open}
       onCancel={onClose_}
       width={700}
@@ -119,10 +128,10 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
       {!running && steps.length === 0 && (
         <>
           <div style={{ marginBottom: tokens.spacing.lg }}>
-            <span style={{ color: tokens.color.text.tertiary, fontSize: tokens.fontSize.sm }}>Select Dataset</span>
+            <span style={{ color: tokens.color.text.tertiary, fontSize: tokens.fontSize.sm }}>选择数据集</span>
             <Select
               style={{ width: "100%", marginTop: tokens.spacing.xs }}
-              placeholder="Choose a dataset..."
+              placeholder="请选择数据集..."
               value={selectedDataset}
               onChange={setSelectedDataset}
               options={datasets.map((d) => ({ label: d.name, value: d.id }))}
@@ -138,7 +147,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
               fontSize: tokens.fontSize.md, fontWeight: 500,
             }}
           >
-            Run {skill?.title}
+            运行 {skill?.title}
           </button>
         </>
       )}
@@ -150,7 +159,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
             current={steps.findIndex((s) => s.status === "process")}
             status={steps.find((s) => s.status === "error") ? "error" : "process"}
             items={steps.map((s) => ({
-              title: s.type.toUpperCase(),
+              title: stepLabels[s.type] || s.type.toUpperCase(),
               status: s.status === "error" ? "error" : s.status === "finish" ? "finish" : s.status === "process" ? "process" : "wait",
             }))}
           />
@@ -158,7 +167,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
           {output.chart && (
             <div style={{ marginTop: tokens.spacing.lg }}>
               <div style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted, marginBottom: 4, textTransform: "uppercase" }}>
-                {output.chart.title as string || "Chart"}
+                {output.chart.title as string || "图表"}
               </div>
               <ReactECharts
                 option={output.chart.options as Record<string, unknown>}

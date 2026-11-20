@@ -26,10 +26,10 @@ interface Workflow {
 
 const stepTypeOptions = [
   { value: "sql", label: "SQL", color: "blue" },
-  { value: "analyze", label: "Analyze", color: "orange" },
-  { value: "insight", label: "Insight", color: "purple" },
-  { value: "visualize", label: "Visualize", color: "green" },
-  { value: "skill", label: "Skill", color: "cyan" },
+  { value: "analyze", label: "分析", color: "orange" },
+  { value: "insight", label: "洞察", color: "purple" },
+  { value: "visualize", label: "可视化", color: "green" },
+  { value: "skill", label: "技能", color: "cyan" },
 ];
 
 export default function WorkflowEditPage() {
@@ -58,15 +58,15 @@ export default function WorkflowEditPage() {
         setSteps(data.steps || []);
         setInitialState({ name: data.name, desc: data.description || "", stepsJson: JSON.stringify(data.steps || []) });
       })
-      .catch(() => message.error("Failed to load workflow"))
+      .catch(() => message.error("工作流加载失败，请稍后重试"))
       .finally(() => setLoading(false));
   }, [workflowId]);
 
   const addStep = (type: string) => {
     const defaults: Record<string, any> = {
       sql: { sql_template: "SELECT * FROM data LIMIT 10" },
-      analyze: { prompt: "Analyze the results." },
-      insight: { prompt: "Provide insights based on the analysis." },
+      analyze: { prompt: "分析查询结果。" },
+      insight: { prompt: "基于分析结果提供业务洞察。" },
       visualize: { chart_type: "auto" },
       skill: { skill_name: "" },
     };
@@ -95,9 +95,9 @@ export default function WorkflowEditPage() {
         steps: steps.map((s, i) => ({ ...s, sort_order: i })),
       });
       setInitialState({ name, desc: description, stepsJson: JSON.stringify(steps) });
-      message.success("Workflow saved");
+      message.success("工作流已保存");
     } catch {
-      message.error("Failed to save");
+      message.error("保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }
@@ -111,7 +111,7 @@ export default function WorkflowEditPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("nexa_token")}` },
       });
-      if (!response.ok) throw new Error(`Run request failed (${response.status})`);
+      if (!response.ok) throw new Error(`运行请求失败（${response.status}）`);
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -134,23 +134,23 @@ export default function WorkflowEditPage() {
           } catch {}
         }
       }
-      if (finalStatus === "complete") message.success("Task run completed. Open Audit to review the evidence.");
-      else message.error(`Task stopped with a partial result${finalError ? `: ${finalError}` : ""}`);
+      if (finalStatus === "complete") message.success("任务运行完成，请在「审计」中查看证据");
+      else message.error(`任务产生部分结果后停止${finalError ? `：${finalError}` : ""}`);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "Failed to run");
+      message.error(error instanceof Error ? error.message : "运行失败，请稍后重试");
     } finally {
       setRunning(false);
     }
   };
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}><Spin /></div>;
-  if (!workflow) return <div style={{ padding: 40, textAlign: "center" }}>Workflow not found</div>;
+  if (!workflow) return <div style={{ padding: 40, textAlign: "center" }}>未找到工作流</div>;
 
   return (
     <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%", maxWidth: 800 }}>
       <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/project/${projectId}?tab=workflows`)}
         style={{ color: "#888", marginBottom: 16 }}>
-        Back to Workflows
+        返回自动化列表
       </Button>
 
       {/* Header */}
@@ -161,29 +161,29 @@ export default function WorkflowEditPage() {
           onChange={(e) => setName(e.target.value)}
           style={{ fontSize: 20, fontWeight: 600, color: tokens.color.text.primary,
             background: "transparent", border: "none", padding: 0, maxWidth: 400 }}
-          placeholder="Workflow name"
+          placeholder="工作流名称"
         />
         <div style={{ display: "flex", gap: 8 }}>
-          <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running}>Run</Button>
+          <Button icon={<PlayCircleOutlined />} onClick={handleRun} loading={running}>运行</Button>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}
             danger={isDirty}
-          >{isDirty ? "Save*" : "Save"}</Button>
+          >{isDirty ? "保存*" : "保存"}</Button>
         </div>
       </div>
       <Input.TextArea
         value={description}
         onChange={(e) => setDesc(e.target.value)}
         style={{ color: "#888", background: "transparent", border: "none", resize: "none", padding: 0, marginBottom: 24 }}
-        placeholder="Description (optional)"
+        placeholder="描述（可选）"
         autoSize
       />
 
-      <Tag color={workflow.status === "draft" ? "default" : "blue"}>{workflow.status}</Tag>
+      <Tag color={workflow.status === "draft" ? "default" : "blue"}>{workflow.status === "draft" ? "草稿" : workflow.status === "active" ? "已启用" : workflow.status}</Tag>
 
       {/* Steps */}
       <div style={{ marginTop: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h4 style={{ color: tokens.color.text.primary, margin: 0 }}>Steps ({steps.length})</h4>
+          <h4 style={{ color: tokens.color.text.primary, margin: 0 }}>步骤（{steps.length}）</h4>
           <div style={{ display: "flex", gap: 4 }}>
             {stepTypeOptions.map((opt) => (
               <Button key={opt.value} size="small" icon={<PlusOutlined />} onClick={() => addStep(opt.value)}>
@@ -195,7 +195,7 @@ export default function WorkflowEditPage() {
 
         {steps.length === 0 ? (
           <Card style={{ background: tokens.color.bg.card, border: `0.5px dashed ${tokens.color.border.default}` }}>
-            <span style={{ color: "#666" }}>No steps yet. Add SQL, analyze, or visualize steps above.</span>
+            <span style={{ color: "#666" }}>还没有步骤，请从上方添加 SQL、分析或可视化步骤。</span>
           </Card>
         ) : (
           steps.map((step, idx) => (
@@ -206,12 +206,12 @@ export default function WorkflowEditPage() {
               title={
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Tag color={stepTypeOptions.find((o) => o.value === step.type)?.color || "default"}>
-                    Step {idx + 1}: {step.type.toUpperCase()}
+                    步骤 {idx + 1}：{stepTypeOptions.find((option) => option.value === step.type)?.label || step.type.toUpperCase()}
                   </Tag>
                 </div>
               }
               extra={
-                <Popconfirm title="Remove this step?" onConfirm={() => removeStep(idx)}>
+                <Popconfirm title="删除这个步骤？" onConfirm={() => removeStep(idx)}>
                   <Button type="text" size="small" danger icon={<DeleteOutlined />} />
                 </Popconfirm>
               }
@@ -230,7 +230,7 @@ export default function WorkflowEditPage() {
                 <Input.TextArea
                   value={step.config.prompt || ""}
                   onChange={(e) => updateStepConfig(idx, "prompt", e.target.value)}
-                  placeholder="What insights should the AI generate?"
+                  placeholder="希望 AI 生成什么洞察？"
                   autoSize={{ minRows: 2, maxRows: 4 }}
                 />
               )}
@@ -238,14 +238,14 @@ export default function WorkflowEditPage() {
                 <Input
                   value={step.config.chart_type || "auto"}
                   onChange={(e) => updateStepConfig(idx, "chart_type", e.target.value)}
-                  placeholder="Chart type (auto, bar, line, pie)"
+                  placeholder="图表类型（auto、bar、line、pie）"
                 />
               )}
               {step.type === "skill" && (
                 <Input
                   value={step.config.skill_name || ""}
                   onChange={(e) => updateStepConfig(idx, "skill_name", e.target.value)}
-                  placeholder="Skill name"
+                  placeholder="技能名称"
                 />
               )}
               <Input
@@ -258,7 +258,7 @@ export default function WorkflowEditPage() {
                     return next;
                   });
                 }}
-                placeholder="Step description (optional)"
+                placeholder="步骤描述（可选）"
                 style={{ marginTop: 8 }}
               />
             </Card>
