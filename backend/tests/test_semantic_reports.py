@@ -92,17 +92,18 @@ def test_report_generation_creates_sql_evidence(client, project_id, auth_headers
     assert report["content"]["sections"]["opportunities"]
     assert report["content"]["sections"]["recommended_follow_up_questions"]
     assert report["content"]["blocks"]
-    assert "Evidence Blocks" in report["content"]["markdown"]
-    assert "Decision Brief" in report["content"]["markdown"]
-    assert "Diagnostic Insights" in report["content"]["markdown"]
-    assert "Hypothesis Engine" in report["content"]["markdown"]
-    assert "Analysis Graph" in report["content"]["markdown"]
-    assert "Metric Contract Check" in report["content"]["markdown"]
-    assert "Recommended Follow-up Questions" in report["content"]["markdown"]
+    assert "证据块" in report["content"]["markdown"]
+    assert "决策摘要" in report["content"]["markdown"]
+    assert "诊断洞察" in report["content"]["markdown"]
+    assert "假设验证" in report["content"]["markdown"]
+    assert "分析图谱" in report["content"]["markdown"]
+    assert "指标契约检查" in report["content"]["markdown"]
+    assert "建议追问" in report["content"]["markdown"]
+    assert "Executive Summary" not in report["content"]["markdown"]
     assert all("sql" in block and "policy" in block for block in report["content"]["blocks"])
     block_titles = {block["title"] for block in report["content"]["blocks"]}
-    assert "Contribution concentration" in block_titles
-    assert "Numeric outlier scan" in block_titles
+    assert "贡献集中度" in block_titles
+    assert "数值异常扫描" in block_titles
 
     list_resp = client.get(f"/api/reports/project/{project_id}", headers=auth_headers)
     assert list_resp.status_code == 200
@@ -121,7 +122,7 @@ def test_auto_investigation_creates_actionable_cards(client, project_id, auth_he
 
     assert resp.status_code == 201, resp.text
     report = resp.json()
-    assert report["title"].endswith("Auto Investigation")
+    assert report["title"].endswith("自动调查")
     cards = report["content"]["investigation_cards"]
     brief = report["content"]["decision_brief"]
     graph = report["content"]["analysis_graph"]

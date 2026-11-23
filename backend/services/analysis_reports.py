@@ -1,4 +1,4 @@
-"""Insight Report generation with SQL evidence and analysis memory."""
+"""生成带 SQL 证据和分析记忆的中文洞察报告。"""
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -128,11 +128,11 @@ def analysis_memory_context(db: Session, project_id: str) -> str:
     memory = _recent_memory(db, project_id)
     lines: list[str] = []
     if memory["recent_questions"]:
-        lines.append("RECENT ANALYSIS CONTEXT:")
+        lines.append("近期分析上下文：")
         for item in memory["recent_questions"][-6:]:
             lines.append(f"- {item['role']}: {item['content']}")
     if memory["recent_reports"]:
-        lines.append("RECENT REPORT FINDINGS:")
+        lines.append("近期报告发现：")
         for report in memory["recent_reports"]:
             highlights = "; ".join(report.get("highlights") or [])
             lines.append(f"- {report['title']}: {highlights}")
@@ -161,9 +161,9 @@ def _run_block(project_id: str, title: str, sql: str) -> dict[str, Any]:
         block["row_count"] = result.row_count
         if result.rows:
             top = result.rows[0]
-            block["finding"] = f"{title}: top result is " + ", ".join(str(v) for v in top[:3])
+            block["finding"] = f"{title}：首条结果为 " + "，".join(str(v) for v in top[:3])
         else:
-            block["finding"] = f"{title}: no rows returned."
+            block["finding"] = f"{title}：未返回数据。"
     except Exception as exc:
         block["error"] = str(exc)
     return block
@@ -179,7 +179,7 @@ def _first_value(block: dict[str, Any]) -> Any:
 def _named_metric(block: dict[str, Any]) -> str:
     value = _first_value(block)
     if value is None:
-        return "n/a"
+        return "暂无"
     if isinstance(value, float):
         return f"{value:,.2f}"
     if isinstance(value, int):
@@ -259,15 +259,15 @@ def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]
         max_missing_pct = max((missing_by_column.get(name, 0.0) for name in referenced_columns), default=0.0)
         issues = []
         if metric.get("status") != "approved":
-            issues.append("Metric is not approved.")
+            issues.append("指标尚未审批通过。")
         if missing_columns:
-            issues.append(f"Missing referenced columns: {', '.join(missing_columns)}")
+            issues.append(f"缺少引用字段：{', '.join(missing_columns)}")
         if not policy.is_safe:
-            issues.append(f"Metric expression is not SQL-policy safe: {policy.reason}")
+            issues.append(f"指标表达式未通过 SQL 安全策略：{policy.reason}")
         if not referenced_columns:
-            issues.append("Metric expression does not quote any dataset column, so lineage is weak.")
+            issues.append("指标表达式未引用任何数据集字段，血缘信息不足。")
         if max_missing_pct > 10:
-            issues.append(f"Referenced columns have up to {max_missing_pct:.2f}% missing values.")
+            issues.append(f"引用字段的最高缺失率为 {max_missing_pct:.2f}%。")
         contracts.append({
             "type": "metric",
             "name": metric.get("name"),
@@ -287,10 +287,10 @@ def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]
         column = str(dimension.get("column") or "")
         issues = []
         if column not in schema_by_name:
-            issues.append(f"Dimension column `{column}` is missing from the dataset.")
+            issues.append(f"数据集中缺少维度字段 `{column}`。")
         missing_pct = missing_by_column.get(column, 0.0)
         if missing_pct > 10:
-            issues.append(f"Dimension column has {missing_pct:.2f}% missing values.")
+            issues.append(f"维度字段缺失率为 {missing_pct:.2f}%。")
         contracts.append({
             "type": "dimension",
             "name": dimension.get("name"),
@@ -302,7 +302,7 @@ def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]
                 "dataset": dataset.name,
                 "row_count": dataset.row_count,
                 "max_missing_pct": missing_pct,
-                "sql_policy": {"is_safe": True, "reason": "dimension column mapping"},
+                "sql_policy": {"is_safe": True, "reason": "维度字段映射"},
             },
         })
 
@@ -310,15 +310,15 @@ def _build_metric_contracts(dataset: Dataset, semantic: dict, schema: list[dict]
     return {
         "status": "pass" if not failed else "warn",
         "summary": (
-            f"{len(contracts) - len(failed)}/{len(contracts)} semantic contracts passed."
+            f"{len(contracts) - len(failed)}/{len(contracts)} 个语义契约检查通过。"
             if contracts
-            else "No semantic contracts are configured for this dataset."
+            else "该数据集尚未配置语义契约。"
         ),
         "contracts": contracts,
         "release_gate": {
-            "can_answer": not any("Missing referenced columns" in issue for contract in contracts for issue in contract["issues"]),
+            "can_answer": not any("缺少引用字段" in issue for contract in contracts for issue in contract["issues"]),
             "requires_review": bool(failed),
-            "reason": "All metric and dimension contracts passed." if not failed else "Some metric or dimension contracts require review.",
+            "reason": "所有指标和维度契约均已通过。" if not failed else "部分指标或维度契约需要复核。",
         },
     }
 
@@ -332,32 +332,33 @@ def _build_sections(
 ) -> dict[str, Any]:
     successful = [b for b in blocks if not b.get("error")]
     errors = [b for b in blocks if b.get("error")]
-    total_block = next((b for b in successful if b["title"].startswith("Total ")), None)
-    avg_block = next((b for b in successful if b["title"].startswith("Average ")), None)
-    breakdown_blocks = [b for b in successful if b["title"].startswith("Top ")]
-    quality_block = next((b for b in successful if b["title"] == "Data quality snapshot"), None)
-    concentration_block = _block_by_title(blocks, "Contribution concentration")
-    margin_block = _block_by_title(blocks, "Overall margin")
-    outlier_block = _block_by_title(blocks, "Numeric outlier scan")
-    underperformer_block = next((b for b in successful if b["title"].startswith("Bottom ")), None)
+    total_block = next((b for b in successful if b["title"].startswith("总计：")), None)
+    avg_block = next((b for b in successful if b["title"].startswith("平均值：")), None)
+    breakdown_blocks = [b for b in successful if b["title"].startswith("排名靠前：")]
+    quality_block = next((b for b in successful if b["title"] == "数据质量快照"), None)
+    concentration_block = _block_by_title(blocks, "贡献集中度")
+    margin_block = _block_by_title(blocks, "整体利润率")
+    outlier_block = _block_by_title(blocks, "数值异常扫描")
+    underperformer_block = next((b for b in successful if b["title"].startswith("排名靠后：")), None)
 
     executive_summary = [
-        f"Analyzed {dataset.row_count:,} rows across {dataset.column_count} columns from `{dataset.name}`.",
-        f"Generated {len(successful)} SQL-backed evidence blocks under the current SQL safety policy.",
+        f"已分析 `{dataset.name}` 的 {dataset.row_count:,} 行、{dataset.column_count} 个字段。",
+        f"在当前 SQL 安全策略下生成了 {len(successful)} 个有 SQL 支撑的证据块。",
     ]
     if total_block:
-        executive_summary.append(f"Primary total metric result: {_named_metric(total_block)}.")
+        executive_summary.append(f"主要汇总指标结果为 {_named_metric(total_block)}。")
     if breakdown_blocks and breakdown_blocks[0].get("rows"):
         row = breakdown_blocks[0]["rows"][0]
-        executive_summary.append(f"Leading segment in `{breakdown_blocks[0]['title']}` is `{row[0]}` with value `{row[1]}`.")
+        executive_summary.append(f"`{breakdown_blocks[0]['title']}` 中表现最好的分组是 `{row[0]}`，指标值为 `{row[1]}`。")
     top_share = _value_from_row(concentration_block, "top_share_pct")
     if top_share is not None:
-        executive_summary.append(f"The leading segment contributes {top_share:.2f}% of the primary metric, indicating {'high' if top_share >= 50 else 'moderate'} concentration.")
+        level = "较高" if top_share >= 50 else "中等"
+        executive_summary.append(f"领先分组贡献了主要指标的 {top_share:.2f}%，集中度{level}。")
     margin = _value_from_row(margin_block, "margin")
     if margin is not None:
-        executive_summary.append(f"Overall margin is {margin:.2%}, useful as a quality lens alongside volume metrics.")
+        executive_summary.append(f"整体利润率为 {margin:.2%}，可与规模指标结合判断业务质量。")
     if errors:
-        executive_summary.append(f"{len(errors)} evidence block(s) failed and should be reviewed before sharing.")
+        executive_summary.append(f"有 {len(errors)} 个证据块执行失败，对外分享前需要复核。")
 
     key_metrics = []
     if total_block:
@@ -375,8 +376,8 @@ def _build_sections(
     if margin_block:
         margin = _value_from_row(margin_block, "margin")
         key_metrics.append({
-            "label": "Overall margin",
-            "value": f"{margin:.2%}" if margin is not None else "n/a",
+            "label": "整体利润率",
+            "value": f"{margin:.2%}" if margin is not None else "暂无",
             "evidence_title": margin_block["title"],
         })
 
@@ -404,24 +405,24 @@ def _build_sections(
         row = concentration_block["rows"][0]
         diagnostic_insights.append({
             "type": "concentration",
-            "title": "Metric concentration",
-            "finding": f"Top segment `{row[0]}` contributes {row[2]}% of the selected metric.",
+            "title": "指标集中度",
+            "finding": f"领先分组 `{row[0]}` 贡献了所选指标的 {row[2]}%。",
             "evidence_title": concentration_block["title"],
         })
     if underperformer_block and underperformer_block.get("rows"):
         row = underperformer_block["rows"][0]
         diagnostic_insights.append({
             "type": "underperformer",
-            "title": "Lowest-performing segment",
-            "finding": f"Lowest segment in `{underperformer_block['title']}` is `{row[0]}` with value `{row[1]}`.",
+            "title": "低表现分组",
+            "finding": f"`{underperformer_block['title']}` 中表现最低的分组是 `{row[0]}`，指标值为 `{row[1]}`。",
             "evidence_title": underperformer_block["title"],
         })
     if outlier_block and outlier_block.get("rows"):
         row = outlier_block["rows"][0]
         diagnostic_insights.append({
             "type": "outlier",
-            "title": "Numeric outlier scan",
-            "finding": f"{row[0]} has min `{row[1]}`, max `{row[2]}`, avg `{row[3]}`; investigate large spread before making decisions.",
+            "title": "数值异常扫描",
+            "finding": f"{row[0]} 的最小值为 `{row[1]}`、最大值为 `{row[2]}`、平均值为 `{row[3]}`；决策前应先调查数值跨度过大的原因。",
             "evidence_title": outlier_block["title"],
         })
 
@@ -434,39 +435,39 @@ def _build_sections(
 
     risks = []
     if not numeric:
-        risks.append("No numeric columns were detected, so metric analysis is limited.")
+        risks.append("未检测到可用的数值字段，指标分析能力受限。")
     if not dimensions:
-        risks.append("No categorical dimensions were detected, so segmentation analysis is limited.")
+        risks.append("未检测到可用的分类维度，细分分析能力受限。")
     if not semantic.get("metrics"):
-        risks.append("No curated semantic metrics exist yet; report used schema-derived aggregates.")
+        risks.append("尚无经过治理的语义指标，本报告使用了从数据结构推导的聚合结果。")
     if errors:
-        risks.append("Some evidence SQL blocks failed; inspect errors before using this report externally.")
+        risks.append("部分证据 SQL 执行失败，对外使用报告前请先检查错误。")
     if top_share is not None and top_share >= 50:
-        risks.append("Primary metric is concentrated in one segment, so aggregate performance may hide segment-level fragility.")
+        risks.append("主要指标集中在单一分组，汇总结果可能掩盖分组层面的脆弱性。")
     if underperformer_block and underperformer_block.get("rows"):
-        risks.append("At least one segment materially underperforms; validate whether this is expected seasonality, pricing, or data quality.")
+        risks.append("至少有一个分组表现明显偏低，需要确认是季节性、定价问题还是数据质量问题。")
     if not risks:
-        risks.append("No critical data quality or evidence-generation risks were detected in the automated scan.")
+        risks.append("自动扫描未发现严重的数据质量或证据生成风险。")
 
     opportunities = []
     if breakdown_blocks:
-        opportunities.append("Use the leading and trailing segments as follow-up analysis candidates.")
+        opportunities.append("可将领先和落后分组作为后续重点分析对象。")
     if margin is not None:
-        opportunities.append("Use margin as a secondary metric to avoid optimizing only for volume.")
+        opportunities.append("可将利润率作为辅助指标，避免只优化业务规模。")
     if semantic.get("metrics"):
-        opportunities.append("Reuse curated semantic metrics for consistent future reports and chat analysis.")
-    opportunities.append("Convert repeated follow-up questions into saved workflows once the analysis path stabilizes.")
+        opportunities.append("后续报告和对话分析可复用已治理的语义指标，保持口径一致。")
+    opportunities.append("分析路径稳定后，可将反复出现的追问沉淀为自动化流程。")
 
     follow_up_questions = []
     if numeric and dimensions:
         follow_up_questions.extend([
-            f"Why does the top {dimensions[0]['name']} lead on {numeric[0]['name']}?",
-            f"Which {dimensions[0]['name']} segments are declining or underperforming?",
-            f"What explains the gap between top and bottom {dimensions[0]['name']} segments?",
+            f"为什么排名第一的 {dimensions[0]['name']} 在 {numeric[0]['name']} 上领先？",
+            f"哪些 {dimensions[0]['name']} 分组正在下降或表现不佳？",
+            f"排名最高和最低的 {dimensions[0]['name']} 分组之间，差距由什么造成？",
         ])
     if len(numeric) > 1:
-        follow_up_questions.append(f"What is the relationship between {numeric[0]['name']} and {numeric[1]['name']}?")
-    follow_up_questions.append("Which rows or segments should be investigated next?")
+        follow_up_questions.append(f"{numeric[0]['name']} 和 {numeric[1]['name']} 之间有什么关系？")
+    follow_up_questions.append("下一步应该重点调查哪些记录或分组？")
 
     return {
         "executive_summary": executive_summary,
@@ -497,60 +498,60 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             return [
                 {
                     **base,
-                    "hypothesis": "The leading segment may be structurally larger than the rest of the portfolio.",
-                    "validation": "Compare the leading segment against the long-tail distribution and check whether the share is above an acceptable concentration threshold.",
-                    "current_assessment": "Partially supported by the contribution concentration evidence; causal explanation still needs segment context.",
-                    "next_question": "Break down the leading segment by the next available dimension and compare its margin.",
+                    "hypothesis": "领先分组的业务规模可能在结构上明显大于其他分组。",
+                    "validation": "将领先分组与长尾分布进行比较，并检查其占比是否超过可接受的集中度阈值。",
+                    "current_assessment": "贡献集中度证据提供了部分支持，但因果解释仍需结合分组背景。",
+                    "next_question": "按下一个可用维度拆分领先分组，并比较其利润率。",
                 },
                 {
                     **base,
-                    "hypothesis": "The concentration may be driven by one metric dimension rather than broad business strength.",
-                    "validation": "Cross-check the leading segment on a second numeric metric, such as profit or margin, before treating it as healthy growth.",
-                    "current_assessment": "Needs validation with a secondary metric.",
-                    "next_question": "Does the leading segment also lead on profit or margin?",
+                    "hypothesis": "集中度可能由单一指标维度驱动，并不代表业务整体强劲。",
+                    "validation": "在将其视为健康增长前，使用利润或利润率等第二个数值指标交叉验证领先分组。",
+                    "current_assessment": "需要使用辅助指标验证。",
+                    "next_question": "领先分组在利润或利润率上是否同样领先？",
                 },
             ]
         if insight_type == "underperformer":
             return [
                 {
                     **base,
-                    "hypothesis": "The lowest-performing segment may have demand, pricing, or operational weakness.",
-                    "validation": "Compare bottom and top segments across the primary metric and a secondary metric.",
-                    "current_assessment": "Supported as a performance gap; root cause is not yet proven.",
-                    "next_question": "Compare the lowest-performing segment with the top segment across all numeric metrics.",
+                    "hypothesis": "表现最低的分组可能存在需求、定价或运营方面的问题。",
+                    "validation": "使用主要指标和一个辅助指标，对比排名最低和最高的分组。",
+                    "current_assessment": "已确认存在表现差距，但根因尚未得到证明。",
+                    "next_question": "在所有数值指标上比较表现最低和最高的分组。",
                 },
                 {
                     **base,
-                    "hypothesis": "The low result may be expected because the segment has fewer records or lower exposure.",
-                    "validation": "Normalize by row count or order count to distinguish scale from performance quality.",
-                    "current_assessment": "Needs normalization before action.",
-                    "next_question": "Normalize the primary metric by row count for each segment.",
+                    "hypothesis": "该分组记录数或曝光量较少，因此低结果可能符合预期。",
+                    "validation": "按记录数或订单数进行标准化，以区分规模差异和表现质量。",
+                    "current_assessment": "采取行动前需要先做标准化。",
+                    "next_question": "按每个分组的记录数对主要指标进行标准化。",
                 },
             ]
         if insight_type == "outlier":
             return [
                 {
                     **base,
-                    "hypothesis": "Extreme records may be distorting aggregate metrics and averages.",
-                    "validation": "Inspect top and bottom records for the numeric metric and compare median vs average.",
-                    "current_assessment": "Supported by the spread scan; record-level drivers still need investigation.",
-                    "next_question": "Show the top and bottom records driving the numeric outliers.",
+                    "hypothesis": "极端记录可能扭曲了汇总指标和平均值。",
+                    "validation": "检查该数值指标排名最高和最低的记录，并比较中位数与平均值。",
+                    "current_assessment": "数值跨度扫描提供了支持，但仍需调查记录层面的驱动因素。",
+                    "next_question": "展示造成数值异常的最高和最低记录。",
                 },
                 {
                     **base,
-                    "hypothesis": "The outlier spread may indicate data quality issues such as miscoded values or mixed units.",
-                    "validation": "Check missing values, negative values, and unusually large values in the affected metric.",
-                    "current_assessment": "Needs data-quality validation.",
-                    "next_question": "Check whether the outlier metric has missing, negative, or unusually large values.",
+                    "hypothesis": "异常跨度可能意味着编码错误、单位混用等数据质量问题。",
+                    "validation": "检查相关指标中的缺失值、负值和异常大值。",
+                    "current_assessment": "需要进行数据质量验证。",
+                    "next_question": "检查异常指标中是否存在缺失值、负值或异常大值。",
                 },
             ]
         return [
             {
                 **base,
-                "hypothesis": "This finding may point to a meaningful business pattern.",
-                "validation": "Validate it with a follow-up segmentation and a second metric.",
-                "current_assessment": "Needs validation.",
-                "next_question": "Segment this finding further and compare it with another metric.",
+                "hypothesis": "这一发现可能反映了有意义的业务规律。",
+                "validation": "通过进一步细分和第二个指标进行验证。",
+                "current_assessment": "需要验证。",
+                "next_question": "进一步细分这一发现，并与另一个指标进行比较。",
             }
         ]
 
@@ -558,19 +559,19 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
         evidence_title = insight["evidence_title"]
         block = block_map.get(evidence_title, {})
         next_question = {
-            "concentration": "Why is the primary metric concentrated in the leading segment?",
-            "underperformer": "What explains the lowest-performing segment and how does it compare with the top segment?",
-            "outlier": "Which records or segments are driving the numeric outliers?",
-        }.get(insight.get("type"), "What should we investigate next?")
+            "concentration": "为什么主要指标集中在领先分组？",
+            "underperformer": "表现最低的分组由什么造成，与领先分组相比有何差异？",
+            "outlier": "哪些记录或分组造成了数值异常？",
+        }.get(insight.get("type"), "下一步应该调查什么？")
         cards.append({
             "type": insight["type"],
             "severity": "high" if insight["type"] in {"concentration", "outlier"} else "medium",
             "finding": insight["finding"],
             "impact": {
-                "concentration": "Aggregate results may hide dependency on one segment; validate whether growth is diversified.",
-                "underperformer": "Low-performing groups are immediate candidates for pricing, operations, or data-quality review.",
-                "outlier": "Large numeric spread can distort averages and should be checked before decisions are made.",
-            }.get(insight["type"], "This finding is a candidate for deeper analysis."),
+                "concentration": "汇总结果可能掩盖对单一分组的依赖，需要确认增长是否足够多元。",
+                "underperformer": "低表现分组应优先接受定价、运营或数据质量复核。",
+                "outlier": "过大的数值跨度可能扭曲平均值，决策前需要检查。",
+            }.get(insight["type"], "这一发现值得进一步分析。"),
             "evidence_title": evidence_title,
             "evidence_preview": block.get("rows", [])[:3],
             "sql": block.get("sql"),
@@ -584,21 +585,21 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             "type": "risk",
             "severity": "medium",
             "finding": sections["risks"][0],
-            "impact": "This is the main caveat to mention before sharing the analysis externally.",
-            "evidence_title": "Automated risk scan",
+            "impact": "这是对外分享分析结果前需要明确说明的主要限制。",
+            "evidence_title": "自动风险扫描",
             "evidence_preview": [],
             "sql": None,
             "confidence": "medium",
-            "next_question": "Which risks could materially change the conclusion?",
+            "next_question": "哪些风险可能实质性改变当前结论？",
             "hypotheses": [
                 {
-                    "hypothesis": "The main risk could materially change the report conclusion.",
-                    "validation": "Identify which evidence block or data-quality issue would change the decision if corrected.",
+                    "hypothesis": "主要风险可能实质性改变报告结论。",
+                    "validation": "识别哪些证据块或数据质量问题在修正后会改变决策。",
                     "status": "needs_validation",
-                    "current_assessment": "Needs review before external sharing.",
-                    "evidence_title": "Automated risk scan",
+                    "current_assessment": "对外分享前需要复核。",
+                    "evidence_title": "自动风险扫描",
                     "supporting_evidence": sections["risks"][0],
-                    "next_question": "Which evidence block is most sensitive to this risk?",
+                    "next_question": "哪个证据块对这一风险最敏感？",
                 }
             ],
         })
@@ -608,21 +609,21 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
             "type": "opportunity",
             "severity": "low",
             "finding": sections["opportunities"][0],
-            "impact": "This turns the report from a static summary into a next-step analysis workflow.",
-            "evidence_title": "Automated opportunity scan",
+            "impact": "这可以把静态报告转化为可继续执行的分析流程。",
+            "evidence_title": "自动机会扫描",
             "evidence_preview": [],
             "sql": None,
             "confidence": "medium",
-            "next_question": "Turn this opportunity into a concrete next analysis step.",
+            "next_question": "把这个机会转化为具体的下一步分析。",
             "hypotheses": [
                 {
-                    "hypothesis": "The opportunity can become a reusable analysis workflow.",
-                    "validation": "Run the suggested follow-up and save the SQL-backed path if it remains useful.",
+                    "hypothesis": "这个机会可以沉淀为可复用的分析流程。",
+                    "validation": "执行建议的后续分析，如果持续有价值，就保存这条由 SQL 支撑的路径。",
                     "status": "proposed",
-                    "current_assessment": "Actionable as a next analysis step.",
-                    "evidence_title": "Automated opportunity scan",
+                    "current_assessment": "可作为下一步分析直接执行。",
+                    "evidence_title": "自动机会扫描",
                     "supporting_evidence": sections["opportunities"][0],
-                    "next_question": "Convert this opportunity into a repeatable analysis workflow.",
+                    "next_question": "将这个机会转化为可重复执行的分析流程。",
                 }
             ],
         })
@@ -644,11 +645,18 @@ def _build_decision_brief(
     evidence_titles = [
         card["evidence_title"]
         for card in investigation_cards
-        if card.get("evidence_title") and card.get("evidence_title") != "Automated opportunity scan"
+        if card.get("evidence_title") and card.get("evidence_title") != "自动机会扫描"
     ][:5]
     recommended_actions = []
     if primary_card:
-        recommended_actions.append(f"Validate the `{primary_card['type']}` finding before making a business decision.")
+        type_label = {
+            "risk": "风险",
+            "opportunity": "机会",
+            "concentration": "集中度",
+            "underperformer": "低表现分组",
+            "outlier": "异常值",
+        }.get(primary_card["type"], primary_card["type"])
+        recommended_actions.append(f"在做出业务决策前，先验证“{type_label}”这一发现。")
         recommended_actions.extend(
             hypothesis["next_question"]
             for hypothesis in primary_card.get("hypotheses", [])[:2]
@@ -661,21 +669,21 @@ def _build_decision_brief(
     if len(numeric) > 1:
         next_metrics.append(str(numeric[1]["name"]))
     if dimensions:
-        next_metrics.append(f"{dimensions[0]['name']} mix")
+        next_metrics.append(f"{dimensions[0]['name']} 分布")
     if not next_metrics:
-        next_metrics.append("Data quality coverage")
+        next_metrics.append("数据质量覆盖率")
 
     return {
-        "audience": "Business owner / data lead",
+        "audience": "业务负责人 / 数据负责人",
         "situation": " ".join(sections.get("executive_summary", [])[:2])
-        or f"`{dataset.name}` was analyzed for decision-ready signals.",
-        "diagnosis": primary_card["finding"] if primary_card else "No material diagnostic signal was found in the automated scan.",
+        or f"已分析 `{dataset.name}` 中可支持决策的信号。",
+        "diagnosis": primary_card["finding"] if primary_card else "自动扫描未发现需要重点关注的诊断信号。",
         "evidence": evidence_titles,
-        "risk": (sections.get("risks") or ["No critical automated risk was detected."])[0],
+        "risk": (sections.get("risks") or ["自动扫描未发现严重风险。"])[0],
         "recommendation": (
             primary_card["impact"]
             if primary_card
-            else "Use this report as a baseline and continue with targeted follow-up questions."
+            else "将本报告作为分析基线，并通过有针对性的追问继续深入。"
         ),
         "recommended_actions": list(dict.fromkeys(recommended_actions))[:5],
         "next_metric_to_monitor": next_metrics[:4],
@@ -695,25 +703,25 @@ def _build_analysis_graph(
             "id": "dataset",
             "type": "dataset",
             "label": dataset.name,
-            "detail": f"{dataset.row_count:,} rows / {dataset.column_count} columns",
+            "detail": f"{dataset.row_count:,} 行 / {dataset.column_count} 个字段",
         },
         {
             "id": "semantic_layer",
             "type": "semantic_layer",
-            "label": "Semantic Layer",
-            "detail": f"{len(semantic.get('metrics') or [])} metrics / {len(semantic.get('dimensions') or [])} dimensions",
+            "label": "语义层",
+            "detail": f"{len(semantic.get('metrics') or [])} 个指标 / {len(semantic.get('dimensions') or [])} 个维度",
         },
         {
             "id": "metric_contracts",
             "type": "metric_contracts",
-            "label": "Metric Contract Check",
-            "detail": metric_contracts.get("summary") or "Semantic contract audit",
+            "label": "指标契约检查",
+            "detail": metric_contracts.get("summary") or "语义契约审计",
             "status": metric_contracts.get("status"),
         },
     ]
     edges = [
-        {"source": "dataset", "target": "semantic_layer", "label": "grounds business definitions"},
-        {"source": "semantic_layer", "target": "metric_contracts", "label": "audits metric contracts"},
+        {"source": "dataset", "target": "semantic_layer", "label": "支撑业务定义"},
+        {"source": "semantic_layer", "target": "metric_contracts", "label": "审计指标契约"},
     ]
 
     for card_idx, card in enumerate(investigation_cards[:6], start=1):
@@ -722,7 +730,13 @@ def _build_analysis_graph(
         nodes.append({
             "id": finding_id,
             "type": "finding",
-            "label": card["type"],
+            "label": {
+                "risk": "风险",
+                "opportunity": "机会",
+                "concentration": "集中度",
+                "underperformer": "低表现分组",
+                "outlier": "异常值",
+            }.get(card["type"], card["type"]),
             "detail": card["finding"],
             "severity": card.get("severity"),
             "confidence": card.get("confidence"),
@@ -730,12 +744,12 @@ def _build_analysis_graph(
         nodes.append({
             "id": evidence_id,
             "type": "evidence",
-            "label": card.get("evidence_title") or "Evidence",
-            "detail": "SQL-backed evidence" if card.get("sql") else "Rule-based scan",
+            "label": card.get("evidence_title") or "证据",
+            "detail": "SQL 支撑的证据" if card.get("sql") else "规则扫描",
         })
         edges.extend([
-            {"source": "metric_contracts", "target": finding_id, "label": "gates investigation"},
-            {"source": finding_id, "target": evidence_id, "label": "validated by"},
+            {"source": "metric_contracts", "target": finding_id, "label": "控制调查准入"},
+            {"source": finding_id, "target": evidence_id, "label": "由此验证"},
         ])
         for hyp_idx, hypothesis in enumerate(card.get("hypotheses", [])[:2], start=1):
             hypothesis_id = f"hypothesis_{card_idx}_{hyp_idx}"
@@ -747,19 +761,19 @@ def _build_analysis_graph(
                 "status": hypothesis.get("status"),
             })
             edges.extend([
-                {"source": finding_id, "target": hypothesis_id, "label": "explains"},
-                {"source": hypothesis_id, "target": evidence_id, "label": "needs evidence"},
+                {"source": finding_id, "target": hypothesis_id, "label": "尝试解释"},
+                {"source": hypothesis_id, "target": evidence_id, "label": "需要证据"},
             ])
 
     nodes.append({
         "id": "decision_brief",
         "type": "decision_brief",
-        "label": "Decision Brief",
-        "detail": decision_brief.get("recommendation") or "Executive-ready summary",
+        "label": "决策摘要",
+        "detail": decision_brief.get("recommendation") or "面向管理者的摘要",
         "confidence": decision_brief.get("confidence"),
     })
     for card_idx, _card in enumerate(investigation_cards[:6], start=1):
-        edges.append({"source": f"finding_{card_idx}", "target": "decision_brief", "label": "summarizes"})
+        edges.append({"source": f"finding_{card_idx}", "target": "decision_brief", "label": "汇总为"})
 
     return {
         "nodes": nodes,
@@ -784,115 +798,115 @@ def _render_markdown(
     lines = [
         f"# {report_title}",
         "",
-        f"Generated at: {generated_at}",
-        f"Dataset: {dataset.name} ({dataset.row_count:,} rows, {dataset.column_count} columns)",
+        f"生成时间：{generated_at}",
+        f"数据集：{dataset.name}（{dataset.row_count:,} 行，{dataset.column_count} 个字段）",
         "",
-        "## Executive Summary",
+        "## 执行摘要",
         *(f"- {item}" for item in sections["executive_summary"]),
         "",
-        "## Key Metrics",
-        *(f"- **{item['label']}**: {item['value']} (evidence: `{item['evidence_title']}`)" for item in sections["key_metrics"]),
+        "## 关键指标",
+        *(f"- **{item['label']}**：{item['value']}（证据：`{item['evidence_title']}`）" for item in sections["key_metrics"]),
         "",
-        "## Decision Brief",
+        "## 决策摘要",
     ]
     if decision_brief:
         lines.extend([
-            f"- **Audience**: {decision_brief['audience']}",
-            f"- **Situation**: {decision_brief['situation']}",
-            f"- **Diagnosis**: {decision_brief['diagnosis']}",
-            f"- **Risk**: {decision_brief['risk']}",
-            f"- **Recommendation**: {decision_brief['recommendation']}",
-            f"- **Confidence**: {decision_brief['confidence']}",
-            "- **Evidence**: " + ", ".join(f"`{item}`" for item in decision_brief.get("evidence", [])),
-            "- **Next metrics to monitor**: " + ", ".join(decision_brief.get("next_metric_to_monitor", [])),
+            f"- **面向对象**：{decision_brief['audience']}",
+            f"- **现状**：{decision_brief['situation']}",
+            f"- **诊断**：{decision_brief['diagnosis']}",
+            f"- **风险**：{decision_brief['risk']}",
+            f"- **建议**：{decision_brief['recommendation']}",
+            f"- **置信度**：{decision_brief['confidence']}",
+            "- **证据**：" + "，".join(f"`{item}`" for item in decision_brief.get("evidence", [])),
+            "- **下一步关注指标**：" + "，".join(decision_brief.get("next_metric_to_monitor", [])),
         ])
     else:
-        lines.append("- No decision brief was generated.")
+        lines.append("- 未生成决策摘要。")
 
-    lines.extend(["", "## Metric Contract Check"])
+    lines.extend(["", "## 指标契约检查"])
     if metric_contracts:
-        lines.append(f"- **Status**: {metric_contracts['status']}")
-        lines.append(f"- **Summary**: {metric_contracts['summary']}")
-        lines.append(f"- **Can answer**: {metric_contracts['release_gate']['can_answer']}")
-        lines.append(f"- **Requires review**: {metric_contracts['release_gate']['requires_review']}")
+        lines.append(f"- **状态**：{metric_contracts['status']}")
+        lines.append(f"- **摘要**：{metric_contracts['summary']}")
+        lines.append(f"- **允许回答**：{metric_contracts['release_gate']['can_answer']}")
+        lines.append(f"- **需要复核**：{metric_contracts['release_gate']['requires_review']}")
         for contract in metric_contracts.get("contracts", [])[:8]:
-            issue_text = "; ".join(contract.get("issues") or ["No issues"])
-            lines.append(f"- `{contract['name']}` ({contract['type']}): {contract['status']} — {issue_text}")
+            issue_text = "；".join(contract.get("issues") or ["无问题"])
+            lines.append(f"- `{contract['name']}`（{contract['type']}）：{contract['status']}，{issue_text}")
     else:
-        lines.append("- No metric contract check was generated.")
+        lines.append("- 未生成指标契约检查。")
 
     lines.extend([
         "",
-        "## Segment Breakdown",
+        "## 细分分析",
     ]
     )
     if sections["segment_breakdown"]:
         for item in sections["segment_breakdown"]:
-            lines.append(f"- **{item['title']}**: evidence block `{item['evidence_title']}`")
+            lines.append(f"- **{item['title']}**：证据块 `{item['evidence_title']}`")
     else:
-        lines.append("- No segment breakdown was generated.")
+        lines.append("- 未生成细分分析。")
 
-    lines.extend(["", "## Data Quality"])
+    lines.extend(["", "## 数据质量"])
     if sections["data_quality"]:
-        lines.extend(f"- {item['column']}: {item['missing_pct']}% missing" for item in sections["data_quality"])
+        lines.extend(f"- {item['column']}：缺失率 {item['missing_pct']}%" for item in sections["data_quality"])
     else:
-        lines.append("- No data quality snapshot was generated.")
+        lines.append("- 未生成数据质量快照。")
 
-    lines.extend(["", "## Diagnostic Insights"])
+    lines.extend(["", "## 诊断洞察"])
     if sections["diagnostic_insights"]:
         lines.extend(
-            f"- **{item['title']}**: {item['finding']} (evidence: `{item['evidence_title']}`)"
+            f"- **{item['title']}**：{item['finding']}（证据：`{item['evidence_title']}`）"
             for item in sections["diagnostic_insights"]
         )
     else:
-        lines.append("- No diagnostic insight was generated.")
+        lines.append("- 未生成诊断洞察。")
 
-    lines.extend(["", "## Hypothesis Engine"])
+    lines.extend(["", "## 假设验证"])
     if investigation_cards:
         for card in investigation_cards:
             lines.append(f"- **{card['type']}**: {card['finding']}")
             for hypothesis in card.get("hypotheses", [])[:3]:
-                lines.append(f"  - Hypothesis: {hypothesis['hypothesis']}")
-                lines.append(f"    - Current assessment: {hypothesis['current_assessment']}")
-                lines.append(f"    - Validation: {hypothesis['validation']}")
+                lines.append(f"  - 假设：{hypothesis['hypothesis']}")
+                lines.append(f"    - 当前判断：{hypothesis['current_assessment']}")
+                lines.append(f"    - 验证方法：{hypothesis['validation']}")
     else:
-        lines.append("- No hypotheses were generated.")
+        lines.append("- 未生成分析假设。")
 
-    lines.extend(["", "## Analysis Graph"])
+    lines.extend(["", "## 分析图谱"])
     if analysis_graph:
-        lines.append(f"- Nodes: {len(analysis_graph.get('nodes', []))}")
-        lines.append(f"- Edges: {len(analysis_graph.get('edges', []))}")
+        lines.append(f"- 节点：{len(analysis_graph.get('nodes', []))}")
+        lines.append(f"- 关系：{len(analysis_graph.get('edges', []))}")
         for edge in analysis_graph.get("edges", [])[:12]:
             lines.append(f"- `{edge['source']}` → `{edge['target']}`: {edge['label']}")
     else:
-        lines.append("- No analysis graph was generated.")
+        lines.append("- 未生成分析图谱。")
 
     lines.extend([
         "",
-        "## Risks",
+        "## 风险",
         *(f"- {item}" for item in sections["risks"]),
         "",
-        "## Opportunities",
+        "## 机会",
         *(f"- {item}" for item in sections["opportunities"]),
         "",
-        "## Recommended Follow-up Questions",
+        "## 建议追问",
         *(f"- {item}" for item in sections["recommended_follow_up_questions"]),
         "",
-        "## Semantic Layer Used",
-        *(semantic_lines or ["- No semantic definitions configured yet."]),
+        "## 使用的语义层",
+        *(semantic_lines or ["- 尚未配置语义定义。"]),
         "",
-        "## Evidence Blocks",
+        "## 证据块",
     ])
     for block in blocks:
         lines.extend([
             f"### {block['title']}",
             "",
-            "SQL:",
+            "SQL：",
             "```sql",
             block["sql"],
             "```",
             "",
-            f"Finding: {block.get('finding') or block.get('error') or 'n/a'}",
+            f"发现：{block.get('finding') or block.get('error') or '暂无'}",
             "",
         ])
     return "\n".join(lines)
@@ -923,19 +937,19 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     ]
     memory = _recent_memory(db, project_id)
 
-    report_title = title or f"{dataset.name} Insight Report"
+    report_title = title or f"{dataset.name} 洞察报告"
     blocks: list[dict[str, Any]] = []
 
     if numeric:
         metric = numeric[0]["name"]
         blocks.append(_run_block(
             project_id,
-            f"Total {metric}",
+            f"总计：{metric}",
             f"SELECT ROUND(SUM({_quote(metric)}), 2) AS total_{metric.replace(' ', '_').lower()} FROM data",
         ))
         blocks.append(_run_block(
             project_id,
-            f"Average {metric}",
+            f"平均值：{metric}",
             f"SELECT ROUND(AVG({_quote(metric)}), 2) AS avg_{metric.replace(' ', '_').lower()} FROM data",
         ))
 
@@ -944,7 +958,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         dim = dimensions[0]["name"]
         blocks.append(_run_block(
             project_id,
-            f"Top {dim} by {metric}",
+            f"排名靠前：按 {metric} 查看 {dim}",
             (
                 f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
@@ -952,7 +966,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         ))
         blocks.append(_run_block(
             project_id,
-            f"Bottom {dim} by {metric}",
+            f"排名靠后：按 {metric} 查看 {dim}",
             (
                 f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric ASC LIMIT 10"
@@ -960,7 +974,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         ))
         blocks.append(_run_block(
             project_id,
-            "Contribution concentration",
+            "贡献集中度",
             (
                 "WITH segment AS ("
                 f"SELECT {_quote(dim)} AS dimension, SUM({_quote(metric)}) AS metric "
@@ -977,7 +991,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         dim = dimensions[0]["name"]
         blocks.append(_run_block(
             project_id,
-            f"Top {dim} by {metric}",
+            f"排名靠前：按 {metric} 查看 {dim}",
             (
                 f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
@@ -989,7 +1003,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         numerator, denominator = margin_columns
         blocks.append(_run_block(
             project_id,
-            "Overall margin",
+            "整体利润率",
             f"SELECT ROUND(SUM({_quote(numerator)}) / NULLIF(SUM({_quote(denominator)}), 0), 4) AS margin FROM data",
         ))
 
@@ -998,7 +1012,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         metric_literal = metric.replace("'", "''")
         blocks.append(_run_block(
             project_id,
-            "Numeric outlier scan",
+            "数值异常扫描",
             (
                 f"SELECT '{metric_literal}' AS metric_name, "
                 f"MIN({_quote(metric)}) AS min_value, "
@@ -1014,16 +1028,16 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         for c in schema[:8]
     ]
     if missing_exprs:
-        blocks.append(_run_block(project_id, "Data quality snapshot", "SELECT " + ", ".join(missing_exprs) + " FROM data"))
+        blocks.append(_run_block(project_id, "数据质量快照", "SELECT " + ", ".join(missing_exprs) + " FROM data"))
 
     sections = _build_sections(dataset, blocks, semantic, numeric, dimensions)
     highlights = sections["executive_summary"][:2] + [
         b["finding"] for b in blocks if b.get("finding") and not b.get("error")
     ][:4]
     semantic_lines = [
-        f"- Metric `{m['name']}` = `{m['expression']}`" for m in semantic["metrics"][:8]
+        f"- 指标 `{m['name']}` = `{m['expression']}`" for m in semantic["metrics"][:8]
     ] + [
-        f"- Dimension `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
+        f"- 维度 `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
     investigation_cards = _build_investigation_cards(sections, blocks)
     decision_brief = _build_decision_brief(dataset, sections, investigation_cards, numeric, dimensions)
@@ -1043,7 +1057,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         "markdown": markdown,
         "governance": {
             "status": "governed" if semantic["metrics"] else "needs_metric_approval",
-            "message": "Only approved semantic definitions are included in this report snapshot.",
+            "message": "本报告快照仅包含已审批通过的语义定义。",
         },
     }
     content = _json_safe(content)
@@ -1064,13 +1078,155 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     return report
 
 
+_LEGACY_TEXT_REPLACEMENTS = (
+    ("Business owner / data lead", "业务负责人 / 数据负责人"),
+    ("Auto Investigation", "自动调查"),
+    ("Insight Report", "洞察报告"),
+    ("No numeric columns were detected, so metric analysis is limited.", "未检测到可用的数值字段，指标分析能力受限。"),
+    ("No categorical dimensions were detected, so segmentation analysis is limited.", "未检测到可用的分类维度，细分分析能力受限。"),
+    ("No curated semantic metrics exist yet; report used schema-derived aggregates.", "尚无经过治理的语义指标，本报告使用了从数据结构推导的聚合结果。"),
+    ("This is the main caveat to mention before sharing the analysis externally.", "这是对外分享分析结果前需要明确说明的主要限制。"),
+    ("Automated risk scan", "自动风险扫描"),
+    ("Automated opportunity scan", "自动机会扫描"),
+    ("Validate the `risk` finding before making a business decision.", "在做出业务决策前，先验证“风险”这一发现。"),
+    ("Which evidence block is most sensitive to this risk?", "哪个证据块对这一风险最敏感？"),
+    ("Which risks could materially change the conclusion?", "哪些风险可能实质性改变当前结论？"),
+    ("Which rows or segments should be investigated next?", "下一步应该重点调查哪些记录或分组？"),
+    ("Data quality coverage", "数据质量覆盖率"),
+    ("The main risk could materially change the report conclusion.", "主要风险可能实质性改变报告结论。"),
+    ("Identify which evidence block or data-quality issue would change the decision if corrected.", "识别哪些证据块或数据质量问题在修正后会改变决策。"),
+    ("Needs review before external sharing.", "对外分享前需要复核。"),
+    ("Use the leading and trailing segments as follow-up analysis candidates.", "可将领先和落后分组作为后续重点分析对象。"),
+    ("Convert repeated follow-up questions into saved workflows once the analysis path stabilizes.", "分析路径稳定后，可将反复出现的追问沉淀为自动化流程。"),
+    ("This turns the report from a static summary into a next-step analysis workflow.", "这可以把静态报告转化为可继续执行的分析流程。"),
+    ("The opportunity can become a reusable analysis workflow.", "这个机会可以沉淀为可复用的分析流程。"),
+    ("Run the suggested follow-up and save the SQL-backed path if it remains useful.", "执行建议的后续分析，如果持续有价值，就保存这条由 SQL 支撑的路径。"),
+    ("Actionable as a next analysis step.", "可作为下一步分析直接执行。"),
+    ("Convert this opportunity into a repeatable analysis workflow.", "将这个机会转化为可重复执行的分析流程。"),
+    ("Turn this opportunity into a concrete next analysis step.", "把这个机会转化为具体的下一步分析。"),
+    ("Semantic Layer", "语义层"),
+    ("Metric Contract Check", "指标契约检查"),
+    ("Semantic contract audit", "语义契约审计"),
+    ("Decision Brief", "决策摘要"),
+    ("Executive-ready summary", "面向管理者的摘要"),
+    ("grounds business definitions", "支撑业务定义"),
+    ("audits metric contracts", "审计指标契约"),
+    ("gates investigation", "控制调查准入"),
+    ("validated by", "由此验证"),
+    ("needs evidence", "需要证据"),
+    ("explains", "尝试解释"),
+    ("summarizes", "汇总为"),
+    ("SQL-backed evidence", "SQL 支撑的证据"),
+    ("Rule-based scan", "规则扫描"),
+    ("Data quality snapshot", "数据质量快照"),
+    ("No semantic contracts are configured for this dataset.", "该数据集尚未配置语义契约。"),
+    ("All metric and dimension contracts passed.", "所有指标和维度契约均已通过。"),
+    ("Some metric or dimension contracts require review.", "部分指标或维度契约需要复核。"),
+    ("Only approved semantic definitions are included in this report snapshot.", "本报告快照仅包含已审批通过的语义定义。"),
+    ("## Executive Summary", "## 执行摘要"),
+    ("## Key Metrics", "## 关键指标"),
+    ("## Decision Brief", "## 决策摘要"),
+    ("## Metric Contract Check", "## 指标契约检查"),
+    ("## Segment Breakdown", "## 细分分析"),
+    ("## Data Quality", "## 数据质量"),
+    ("## Diagnostic Insights", "## 诊断洞察"),
+    ("## Hypothesis Engine", "## 假设验证"),
+    ("## Analysis Graph", "## 分析图谱"),
+    ("## Risks", "## 风险"),
+    ("## Opportunities", "## 机会"),
+    ("## Recommended Follow-up Questions", "## 建议追问"),
+    ("## Semantic Layer Used", "## 使用的语义层"),
+    ("## Evidence Blocks", "## 证据块"),
+    ("语义层 Used", "使用的语义层"),
+    ("Generated at:", "生成时间："),
+    ("Dataset:", "数据集："),
+    ("Finding:", "发现："),
+    ("SQL:", "SQL："),
+    ("- **Audience**:", "- **面向对象**："),
+    ("- **Situation**:", "- **现状**："),
+    ("- **Diagnosis**:", "- **诊断**："),
+    ("- **Risk**:", "- **风险**："),
+    ("- **Recommendation**:", "- **建议**："),
+    ("- **Confidence**:", "- **置信度**："),
+    ("- **Evidence**:", "- **证据**："),
+    ("- **Next metrics to monitor**:", "- **下一步关注指标**："),
+    ("- **Status**:", "- **状态**："),
+    ("- **Summary**:", "- **摘要**："),
+    ("- **Can answer**:", "- **允许回答**："),
+    ("- **Requires review**:", "- **需要复核**："),
+    ("No segment breakdown was generated.", "未生成细分分析。"),
+    ("No diagnostic insight was generated.", "未生成诊断洞察。"),
+    ("No semantic definitions configured yet.", "尚未配置语义定义。"),
+    ("Hypothesis:", "假设："),
+    ("Current assessment:", "当前判断："),
+    ("Validation:", "验证方法："),
+    ("Nodes:", "节点："),
+    ("Edges:", "关系："),
+    ("**risk**", "**风险**"),
+    ("**opportunity**", "**机会**"),
+    ("**置信度**： medium", "**置信度**：中"),
+    ("**置信度**： high", "**置信度**：高"),
+    ("**置信度**： low", "**置信度**：低"),
+    ("**状态**： pass", "**状态**：通过"),
+    ("**状态**： warn", "**状态**：有警告"),
+    ("**允许回答**： True", "**允许回答**：是"),
+    ("**允许回答**： False", "**允许回答**：否"),
+    ("**需要复核**： True", "**需要复核**：是"),
+    ("**需要复核**： False", "**需要复核**：否"),
+)
+
+
+def _localize_legacy_text(value: str) -> str:
+    text = value
+    text = re.sub(r"^(.*?) Auto Investigation$", r"\1 自动调查", text)
+    text = re.sub(r"^(.*?) Insight Report$", r"\1 洞察报告", text)
+    text = re.sub(
+        r"Analyzed ([\d,]+) rows across (\d+) columns from `([^`]+)`\.",
+        r"已分析 `\3` 的 \1 行、\2 个字段。",
+        text,
+    )
+    text = re.sub(
+        r"Generated (\d+) SQL-backed evidence blocks under the current SQL safety policy\.",
+        r"在当前 SQL 安全策略下生成了 \1 个有 SQL 支撑的证据块。",
+        text,
+    )
+    text = re.sub(r"^(\d+)/(\d+) semantic contracts passed\.$", r"\1/\2 个语义契约检查通过。", text)
+    text = re.sub(r"^(.*?) rows / (.*?) columns$", r"\1 行 / \2 个字段", text)
+    text = re.sub(r"^(\d+) metrics / (\d+) dimensions$", r"\1 个指标 / \2 个维度", text)
+    text = re.sub(
+        r"Dataset: ([^\n]+?) \(([\d,]+) rows, (\d+) columns\)",
+        r"数据集：\1（\2 行，\3 个字段）",
+        text,
+    )
+    text = re.sub(r"([\w.-]+): ([\d.]+)% missing", r"\1：缺失率 \2%", text)
+    text = re.sub(r"Data quality snapshot: top result is ", "数据质量快照：首条结果为 ", text)
+    for source, target in _LEGACY_TEXT_REPLACEMENTS:
+        text = text.replace(source, target)
+    return text
+
+
+def _localize_legacy_content(value: Any, key: str | None = None) -> Any:
+    untouched_keys = {
+        "sql", "columns", "rows", "type", "status", "severity", "confidence",
+        "source", "target", "entry_node", "terminal_node", "id", "project_id",
+        "dataset_id", "created_at", "published_at", "published_by",
+    }
+    if isinstance(value, dict):
+        return {item_key: _localize_legacy_content(item, item_key) for item_key, item in value.items()}
+    if isinstance(value, list):
+        return [_localize_legacy_content(item, key) for item in value]
+    if isinstance(value, str) and key not in untouched_keys:
+        return _localize_legacy_text(value)
+    return value
+
+
 def serialize_report(report: AnalysisReport) -> dict:
     return {
         "id": report.id,
         "project_id": report.project_id,
         "dataset_id": report.dataset_id,
-        "title": report.title,
-        "content": report.content,
+        "title": _localize_legacy_text(report.title),
+        "content": _localize_legacy_content(report.content),
         "semantic_snapshot": report.semantic_snapshot,
         "memory": report.memory,
         "status": report.status,

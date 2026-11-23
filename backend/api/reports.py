@@ -61,7 +61,7 @@ def create_auto_investigation(
         raise HTTPException(status_code=400, detail="No dataset available for investigation")
     if dataset.source_type == "mysql":
         raise HTTPException(status_code=400, detail="MySQL investigation is not connected yet; import a snapshot before generating a report")
-    title = req.title or f"{dataset.name} Auto Investigation"
+    title = req.title or f"{dataset.name} 自动调查"
     report = generate_report(db, req.project_id, dataset, title)
     return serialize_report(report)
 

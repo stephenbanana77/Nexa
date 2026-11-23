@@ -18,6 +18,26 @@ function rowsToRecords(columns: string[], rows: unknown[][]) {
   });
 }
 
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  dataset: "数据集",
+  semantic_layer: "语义层",
+  metric_contracts: "指标契约",
+  finding: "发现",
+  evidence: "证据",
+  hypothesis: "假设",
+  decision_brief: "决策摘要",
+  risk: "风险",
+  opportunity: "机会",
+  concentration: "集中度",
+  underperformer: "低表现分组",
+  outlier: "异常值",
+};
+
+function reportTypeLabel(value?: string) {
+  if (!value) return "未知";
+  return REPORT_TYPE_LABELS[value] || value;
+}
+
 export default function ReportsPage({ projectId }: Props) {
   const navigate = useNavigate();
   const [reports, setReports] = useState<AnalysisReport[]>([]);
@@ -39,7 +59,9 @@ export default function ReportsPage({ projectId }: Props) {
       const list = Array.isArray(reportData) ? reportData : [];
       const ds = datasetResp.items || datasetResp || [];
       setReports(list);
-      setSelectedReport((prev) => prev || list[0] || null);
+      setSelectedReport((prev) => (
+        prev ? list.find((report: AnalysisReport) => report.id === prev.id) || list[0] || null : list[0] || null
+      ));
       setDatasets(ds);
       setSelectedDatasetId((prev) => prev || ds[0]?.id);
     } finally {
@@ -250,15 +272,15 @@ export default function ReportsPage({ projectId }: Props) {
                         }}
                       >
                         <div>
-                          <Tag color="blue">{source?.type || edge.source}</Tag>
-                          <Typography.Text>{source?.label || edge.source}</Typography.Text>
+                          <Tag color="blue">{reportTypeLabel(source?.type || edge.source)}</Tag>
+                          <Typography.Text>{source?.type === "finding" ? reportTypeLabel(source.label) : source?.label || edge.source}</Typography.Text>
                         </div>
                         <Typography.Text type="secondary" style={{ textAlign: "center" }}>→ {edge.label} →</Typography.Text>
                         <div>
                           <Tag color={target?.type === "decision_brief" ? "magenta" : target?.type === "hypothesis" ? "geekblue" : "gold"}>
-                            {target?.type || edge.target}
+                            {reportTypeLabel(target?.type || edge.target)}
                           </Tag>
-                          <Typography.Text>{target?.label || edge.target}</Typography.Text>
+                          <Typography.Text>{target?.type === "finding" ? reportTypeLabel(target.label) : target?.label || edge.target}</Typography.Text>
                         </div>
                       </div>
                     );
@@ -274,7 +296,7 @@ export default function ReportsPage({ projectId }: Props) {
                     <Card
                       key={`${card.type}-${idx}`}
                       size="small"
-                      title={<Space wrap><Tag color={card.severity === "high" ? "red" : card.severity === "medium" ? "gold" : "blue"}>{card.severity === "high" ? "高" : card.severity === "medium" ? "中" : "低"}</Tag><span>{card.type}</span></Space>}
+                      title={<Space wrap><Tag color={card.severity === "high" ? "red" : card.severity === "medium" ? "gold" : "blue"}>{card.severity === "high" ? "高" : card.severity === "medium" ? "中" : "低"}</Tag><span>{reportTypeLabel(card.type)}</span></Space>}
                       extra={<Tag color={card.confidence === "high" ? "green" : "default"}>置信度：{card.confidence === "high" ? "高" : card.confidence === "medium" ? "中" : "低"}</Tag>}
                     >
                       <Typography.Paragraph style={{ marginBottom: 8 }}>{card.finding}</Typography.Paragraph>
