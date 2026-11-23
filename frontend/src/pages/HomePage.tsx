@@ -9,6 +9,7 @@ import {
   LogoutOutlined,
   PlusOutlined,
   SearchOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../stores/auth";
 import api from "../api/client";
@@ -120,6 +121,14 @@ export default function HomePage() {
     }
   };
 
+  const startDataWorkspace = () => {
+    if (selectedProjectId) {
+      navigate(`/project/${selectedProjectId}?tab=data`);
+      return;
+    }
+    setModalOpen(true);
+  };
+
   return (
     <main className="home-shell">
       <header className="home-header">
@@ -149,24 +158,36 @@ export default function HomePage() {
               if ((event.metaKey || event.ctrlKey) && taskBrief.trim()) openTask();
             }}
           />
-          <div className="task-input-toolbar">
-            <Select
-              value={selectedProjectId}
-              onChange={setSelectedProjectId}
-              placeholder="选择工作区"
-              options={projects.map((project) => ({ value: project.id, label: project.name === "Sample - Superstore Demo" ? "示例 - Superstore 演示" : project.name }))}
-              className="workspace-select"
-            />
-            <Button
-              type="primary"
-              icon={<ArrowRightOutlined />}
-              iconPosition="end"
-              onClick={() => openTask()}
-              disabled={!taskBrief.trim()}
-            >
-              交给 Agent
-            </Button>
-          </div>
+          {projects.length === 0 ? (
+            <div className="task-input-first-run">
+              <span>先创建工作区并放入数据，之后就能把任务交给 Agent。</span>
+              <div>
+                <Button type="primary" icon={<UploadOutlined />} onClick={startDataWorkspace}>
+                  新建工作区并上传
+                </Button>
+                <Button onClick={createSampleProject} loading={loading}>打开示例</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="task-input-toolbar">
+              <Select
+                value={selectedProjectId}
+                onChange={setSelectedProjectId}
+                placeholder="选择工作区"
+                options={projects.map((project) => ({ value: project.id, label: project.name === "Sample - Superstore Demo" ? "示例 - Superstore 演示" : project.name }))}
+                className="workspace-select"
+              />
+              <Button
+                type="primary"
+                icon={<ArrowRightOutlined />}
+                iconPosition="end"
+                onClick={() => openTask()}
+                disabled={!taskBrief.trim()}
+              >
+                交给 Agent
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="task-examples" aria-label="数据任务示例">
@@ -206,12 +227,16 @@ export default function HomePage() {
         {visibleProjects.length === 0 ? (
           <div className="workspace-empty">
             <DatabaseOutlined />
-            <div>
-              <strong>还没有工作区</strong>
-              <span>为自己的数据创建工作区，或先打开可用的演示项目。</span>
+            <div className="workspace-empty-copy">
+              <strong>从一份数据开始</strong>
+              <span>上传 CSV / Excel 就能开始分析，不需要先连接 MySQL。</span>
             </div>
-            <Button type="primary" onClick={() => setModalOpen(true)}>创建工作区</Button>
-            <Button onClick={createSampleProject} loading={loading}>打开演示</Button>
+            <div className="workspace-empty-actions">
+              <Button type="primary" icon={<UploadOutlined />} onClick={startDataWorkspace}>
+                新建工作区并上传
+              </Button>
+              <Button onClick={createSampleProject} loading={loading}>打开示例</Button>
+            </div>
           </div>
         ) : (
           <div className="workspace-list">
@@ -244,7 +269,7 @@ export default function HomePage() {
         confirmLoading={loading}
         okText="创建"
       >
-        <p className="modal-helper">同一业务场景的数据源、分析任务和报告，建议放在一个工作区中。</p>
+        <p className="modal-helper">创建后可以直接上传 CSV / Excel；不需要先连接 MySQL。</p>
         <Input
           placeholder="工作区名称"
           value={newName}
