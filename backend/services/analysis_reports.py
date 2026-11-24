@@ -221,6 +221,17 @@ def _pick_margin_columns(numeric: list[dict]) -> tuple[str, str] | None:
     return None
 
 
+def _metric_priority(metric: dict[str, Any]) -> tuple[int, str]:
+    text = f"{metric.get('name', '')} {metric.get('expression', '')}".lower()
+    priority = ("sales", "revenue", "销售额", "amount", "profit", "income", "quantity", "qty", "units", "count")
+    return next((index for index, token in enumerate(priority) if token in text), len(priority)), text
+
+
+def _aggregate_inner(expression: str) -> str | None:
+    match = re.fullmatch(r"\s*SUM\s*\((.+)\)\s*", expression, flags=re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip() if match else None
+
+
 def _json_safe(value: Any) -> Any:
     """Recursively convert query values to JSON-safe native types."""
     if value is None or isinstance(value, (str, bool, int)):
@@ -501,14 +512,14 @@ def _build_investigation_cards(sections: dict[str, Any], blocks: list[dict[str, 
                     "hypothesis": "领先分组的业务规模可能在结构上明显大于其他分组。",
                     "validation": "将领先分组与长尾分布进行比较，并检查其占比是否超过可接受的集中度阈值。",
                     "current_assessment": "贡献集中度证据提供了部分支持，但因果解释仍需结合分组背景。",
-                    "next_question": "按下一个可用维度拆分领先分组，并比较其利润率。",
+                    "next_question": "按下一个可用维度拆分领先分组，并用另一个已审批指标交叉验证。",
                 },
                 {
                     **base,
                     "hypothesis": "集中度可能由单一指标维度驱动，并不代表业务整体强劲。",
-                    "validation": "在将其视为健康增长前，使用利润或利润率等第二个数值指标交叉验证领先分组。",
+                    "validation": "在将其视为健康增长前，使用数据集中已定义且审批的第二个数值指标交叉验证。",
                     "current_assessment": "需要使用辅助指标验证。",
-                    "next_question": "领先分组在利润或利润率上是否同样领先？",
+                    "next_question": "领先分组在另一个已审批指标上是否同样领先？",
                 },
             ]
         if insight_type == "underperformer":
@@ -926,7 +937,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         for column in re.findall(r'"([^"]+)"', str(metric.get("expression") or ""))
     }
     approved_dimension_columns = {str(item.get("column")) for item in semantic["dimensions"]}
-    numeric = [
+    numeric_columns = [
         column for column in schema
         if str(column.get("name")) in approved_metric_columns
         and _is_numeric(str(column.get("type", "")))
@@ -935,40 +946,47 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         column for column in schema
         if str(column.get("name")) in approved_dimension_columns
     ]
+    analysis_metrics = sorted(semantic["metrics"], key=_metric_priority)
     memory = _recent_memory(db, project_id)
 
     report_title = title or f"{dataset.name} 洞察报告"
     blocks: list[dict[str, Any]] = []
 
-    if numeric:
-        metric = numeric[0]["name"]
+    if analysis_metrics:
+        metric = analysis_metrics[0]
+        metric_name = str(metric.get("name") or "主要指标")
+        metric_expression = str(metric.get("expression") or "")
         blocks.append(_run_block(
             project_id,
-            f"总计：{metric}",
-            f"SELECT ROUND(SUM({_quote(metric)}), 2) AS total_{metric.replace(' ', '_').lower()} FROM data",
+            f"总计：{metric_name}",
+            f"SELECT ROUND(({metric_expression}), 2) AS metric_value FROM data",
         ))
-        blocks.append(_run_block(
-            project_id,
-            f"平均值：{metric}",
-            f"SELECT ROUND(AVG({_quote(metric)}), 2) AS avg_{metric.replace(' ', '_').lower()} FROM data",
-        ))
+        row_expression = _aggregate_inner(metric_expression)
+        if row_expression:
+            blocks.append(_run_block(
+                project_id,
+                f"平均值：{metric_name}",
+                f"SELECT ROUND(AVG({row_expression}), 2) AS metric_average FROM data",
+            ))
 
-    if numeric and dimensions:
-        metric = numeric[0]["name"]
+    if analysis_metrics and dimensions:
+        metric = analysis_metrics[0]
+        metric_name = str(metric.get("name") or "主要指标")
+        metric_expression = str(metric.get("expression") or "")
         dim = dimensions[0]["name"]
         blocks.append(_run_block(
             project_id,
-            f"排名靠前：按 {metric} 查看 {dim}",
+            f"排名靠前：按 {metric_name} 查看 {dim}",
             (
-                f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
+                f"SELECT {_quote(dim)} AS dimension, ROUND(({metric_expression}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
             ),
         ))
         blocks.append(_run_block(
             project_id,
-            f"排名靠后：按 {metric} 查看 {dim}",
+            f"排名靠后：按 {metric_name} 查看 {dim}",
             (
-                f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
+                f"SELECT {_quote(dim)} AS dimension, ROUND(({metric_expression}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric ASC LIMIT 10"
             ),
         ))
@@ -977,7 +995,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
             "贡献集中度",
             (
                 "WITH segment AS ("
-                f"SELECT {_quote(dim)} AS dimension, SUM({_quote(metric)}) AS metric "
+                f"SELECT {_quote(dim)} AS dimension, ({metric_expression}) AS metric "
                 f"FROM data GROUP BY {_quote(dim)}"
                 ") "
                 "SELECT dimension, ROUND(metric, 2) AS metric, "
@@ -986,19 +1004,21 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
             ),
         ))
 
-    if len(numeric) > 1 and dimensions:
-        metric = numeric[1]["name"]
+    if len(analysis_metrics) > 1 and dimensions:
+        metric = analysis_metrics[1]
+        metric_name = str(metric.get("name") or "辅助指标")
+        metric_expression = str(metric.get("expression") or "")
         dim = dimensions[0]["name"]
         blocks.append(_run_block(
             project_id,
-            f"排名靠前：按 {metric} 查看 {dim}",
+            f"排名靠前：按 {metric_name} 查看 {dim}",
             (
-                f"SELECT {_quote(dim)} AS dimension, ROUND(SUM({_quote(metric)}), 2) AS metric "
+                f"SELECT {_quote(dim)} AS dimension, ROUND(({metric_expression}), 2) AS metric "
                 f"FROM data GROUP BY {_quote(dim)} ORDER BY metric DESC LIMIT 10"
             ),
         ))
 
-    margin_columns = _pick_margin_columns(numeric)
+    margin_columns = _pick_margin_columns(numeric_columns)
     if margin_columns:
         numerator, denominator = margin_columns
         blocks.append(_run_block(
@@ -1007,8 +1027,8 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
             f"SELECT ROUND(SUM({_quote(numerator)}) / NULLIF(SUM({_quote(denominator)}), 0), 4) AS margin FROM data",
         ))
 
-    if numeric:
-        metric = numeric[0]["name"]
+    if numeric_columns:
+        metric = numeric_columns[0]["name"]
         metric_literal = metric.replace("'", "''")
         blocks.append(_run_block(
             project_id,
@@ -1030,7 +1050,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
     if missing_exprs:
         blocks.append(_run_block(project_id, "数据质量快照", "SELECT " + ", ".join(missing_exprs) + " FROM data"))
 
-    sections = _build_sections(dataset, blocks, semantic, numeric, dimensions)
+    sections = _build_sections(dataset, blocks, semantic, analysis_metrics, dimensions)
     highlights = sections["executive_summary"][:2] + [
         b["finding"] for b in blocks if b.get("finding") and not b.get("error")
     ][:4]
@@ -1040,7 +1060,7 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
         f"- 维度 `{d['name']}` -> `{d['column']}`" for d in semantic["dimensions"][:8]
     ]
     investigation_cards = _build_investigation_cards(sections, blocks)
-    decision_brief = _build_decision_brief(dataset, sections, investigation_cards, numeric, dimensions)
+    decision_brief = _build_decision_brief(dataset, sections, investigation_cards, analysis_metrics, dimensions)
     metric_contracts = _build_metric_contracts(dataset, semantic, schema)
     analysis_graph = _build_analysis_graph(dataset, semantic, metric_contracts, investigation_cards, decision_brief)
     markdown = _render_markdown(report_title, dataset, sections, blocks, semantic_lines, investigation_cards, decision_brief, analysis_graph, metric_contracts)
@@ -1079,6 +1099,9 @@ def generate_report(db: Session, project_id: str, dataset: Dataset, title: str |
 
 
 _LEGACY_TEXT_REPLACEMENTS = (
+    ("按下一个可用维度拆分领先分组，并比较其利润率。", "按下一个可用维度拆分领先分组，并用另一个已审批指标交叉验证。"),
+    ("在将其视为健康增长前，使用利润或利润率等第二个数值指标交叉验证领先分组。", "在将其视为健康增长前，使用数据集中已定义且审批的第二个数值指标交叉验证。"),
+    ("领先分组在利润或利润率上是否同样领先？", "领先分组在另一个已审批指标上是否同样领先？"),
     ("Business owner / data lead", "业务负责人 / 数据负责人"),
     ("Auto Investigation", "自动调查"),
     ("Insight Report", "洞察报告"),

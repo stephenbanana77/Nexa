@@ -42,6 +42,12 @@
   letter-spacing: 0;
 }
 
+.agent-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .agent-thread {
   flex: 1;
   min-height: 340px;
@@ -350,6 +356,15 @@
 }
 
 @media (max-width: 640px) {
+  .agent-conversation-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 12px;
+  }
+  .agent-conversation-header h2 { font-size: 18px; }
+  .agent-history-actions { width: 100%; }
+  .agent-history-actions .ant-select { width: 100% !important; }
   .agent-workspace, .agent-conversation { min-height: calc(100vh - 114px); }
   .agent-thread { padding: 18px 12px 24px; }
   .agent-composer { grid-template-columns: 1fr 44px; }

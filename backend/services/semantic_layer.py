@@ -15,6 +15,13 @@ _ADDITIVE_MEASURE_TOKENS = (
     "quantity", "qty", "units", "count", "cnt", "orders", "volume",
 )
 
+_DIMENSION_PRIORITY_TOKENS = (
+    "region", "segment", "category", "sub_category", "country", "state", "city",
+    "channel", "brand", "department", "market", "date", "month", "quarter", "year",
+)
+
+_FREE_TEXT_TOKENS = ("description", "comment", "note", "remark", "address")
+
 
 def _is_technical_numeric_field(name: str) -> bool:
     """Avoid treating identifiers and location codes as additive business metrics."""
@@ -29,6 +36,31 @@ def _is_additive_measure(name: str) -> bool:
     normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
     tokens = set(normalized.split("_"))
     return any(token in tokens or token in normalized for token in _ADDITIVE_MEASURE_TOKENS)
+
+
+def _normalized(name: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+
+
+def _is_dimension_candidate(name: str, dtype: str) -> bool:
+    normalized = _normalized(name)
+    tokens = set(normalized.split("_"))
+    if _is_technical_numeric_field(name) or normalized.endswith(("id", "code", "no", "number")):
+        return False
+    if any(token in normalized for token in _FREE_TEXT_TOKENS):
+        return False
+    if any(token in dtype for token in ("int", "float", "double", "decimal", "number")):
+        return any(token in tokens for token in ("year", "month", "quarter"))
+    return any(token in normalized for token in _DIMENSION_PRIORITY_TOKENS) or "char" in dtype or "date" in dtype or "time" in dtype
+
+
+def _matching_column(schema_info: list[dict], candidates: tuple[str, ...]) -> str | None:
+    for column in schema_info:
+        name = str(column.get("name", "")).strip()
+        compact = "".join(ch.lower() for ch in name if ch.isalnum())
+        if any(candidate in compact for candidate in candidates):
+            return name
+    return None
 
 
 def list_semantic_layer(
@@ -121,6 +153,20 @@ def seed_semantic_layer_from_schema(
         )
     }
 
+    quantity_column = _matching_column(schema_info, ("quantity", "qty", "units"))
+    price_column = _matching_column(schema_info, ("unitprice", "price"))
+    if quantity_column and price_column and "销售额" not in existing_metrics:
+        db.add(SemanticMetric(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            name="销售额",
+            expression=f'SUM("{quantity_column}" * "{price_column}")',
+            description=f"数量与单价的乘积汇总，保留退货负数（{quantity_column} × {price_column}）。",
+            format="currency",
+        ))
+        created["metrics"] += 1
+        existing_metrics.add("销售额")
+
     for col in schema_info:
         name = str(col.get("name", "")).strip()
         dtype = str(col.get("type", "")).lower()
@@ -142,14 +188,14 @@ def seed_semantic_layer_from_schema(
                     format="number",
                 ))
                 created["metrics"] += 1
-        else:
+        elif _is_dimension_candidate(name, dtype):
             if name.lower() not in existing_dimensions:
                 db.add(SemanticDimension(
                     project_id=project_id,
                     dataset_id=dataset_id,
                     name=name,
                     column=name,
-                    description=f"Auto-suggested dimension for column {name}.",
+                    description=f"根据字段 {name} 自动建议的业务维度。",
                 ))
                 created["dimensions"] += 1
     db.commit()

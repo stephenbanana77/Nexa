@@ -369,7 +369,7 @@ export default function ChatPage({ projectId }: { projectId: string }) {
             <span className="agent-kicker">数据任务 Agent</span>
             <h2>{conversationId ? "继续完善任务" : "描述你需要的结果"}</h2>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="agent-history-actions">
             {conversations.length > 0 && (
               <Select
                 value={conversationId}

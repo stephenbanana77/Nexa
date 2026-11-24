@@ -5,6 +5,7 @@ import { CheckCircleOutlined, FileSearchOutlined, FileTextOutlined, QuestionCirc
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
 import type { AnalysisReport, Dataset } from "../types";
+import "./ReportsPage.css";
 
 interface Props {
   projectId: string;
@@ -36,6 +37,23 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
 function reportTypeLabel(value?: string) {
   if (!value) return "未知";
   return REPORT_TYPE_LABELS[value] || value;
+}
+
+function humanizeReportError(detail: unknown, fallback: string) {
+  const messageText = typeof detail === "string"
+    ? detail
+    : detail && typeof detail === "object" && "message" in detail
+      ? String((detail as { message?: unknown }).message || "")
+      : "";
+  const normalized = messageText.toLowerCase();
+  if (normalized.includes("data quality") || normalized.includes("quality warnings")) {
+    return "发布前仍有数据质量阻断项。请先到「数据」页运行质量检查并处理问题。";
+  }
+  if (normalized.includes("approved metric") || normalized.includes("metric contract")) {
+    return "请先在「高级工具 > 指标定义」完成指标审批，然后重新生成报告。";
+  }
+  if (normalized.includes("mysql")) return "MySQL 数据需要先导入快照，才能生成报告。";
+  return (messageText || fallback).replace(/\s*\(request_id:[^)]+\)/gi, "").slice(0, 220);
 }
 
 export default function ReportsPage({ projectId }: Props) {
@@ -86,7 +104,10 @@ export default function ReportsPage({ projectId }: Props) {
       setSelectedReport(data);
       message.success(isInvestigation ? "自动调查已完成" : "洞察报告已生成");
     } catch (err: any) {
-      message.error(err.response?.data?.detail || (isInvestigation ? "自动调查失败，请稍后重试" : "报告生成失败，请稍后重试"));
+      message.error(humanizeReportError(
+        err.response?.data?.detail,
+        isInvestigation ? "自动调查失败，请稍后重试" : "报告生成失败，请稍后重试",
+      ));
     } finally {
       setInvestigating(false);
       setGenerating(false);
@@ -107,9 +128,7 @@ export default function ReportsPage({ projectId }: Props) {
       setSelectedReport(data);
       message.success("报告已发布");
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      const errorText = typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : "报告发布失败，请稍后重试";
-      message.error(errorText);
+      message.error(humanizeReportError(err.response?.data?.detail, "报告发布失败，请稍后重试"));
     } finally {
       setPublishing(false);
     }
@@ -123,8 +142,8 @@ export default function ReportsPage({ projectId }: Props) {
   const graphNodesById = new Map((analysisGraph?.nodes || []).map((node) => [node.id, node]));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 16, padding: "12px 0" }}>
-      <Card title="数据调查" extra={<Button icon={<ReloadOutlined />} onClick={load} title="刷新" />} style={{ minHeight: 520 }}>
+    <div className="reports-layout">
+      <Card className="reports-sidebar" title="数据调查" extra={<Button icon={<ReloadOutlined />} onClick={load} title="刷新" />}>
         <Space direction="vertical" style={{ width: "100%" }}>
           <Select
             placeholder="选择数据集"
@@ -166,7 +185,7 @@ export default function ReportsPage({ projectId }: Props) {
         )}
       </Card>
 
-      <Card>
+      <Card className="reports-detail">
         {!selectedReport ? (
           <Empty description="开始自动调查后，即可查看由 SQL 证据支持的发现" />
         ) : (
@@ -259,12 +278,9 @@ export default function ReportsPage({ projectId }: Props) {
                     const target = graphNodesById.get(edge.target);
                     return (
                       <div
+                        className="report-graph-edge"
                         key={`${edge.source}-${edge.target}-${idx}`}
                         style={{
-                          display: "grid",
-                          gridTemplateColumns: "minmax(0, 1fr) 160px minmax(0, 1fr)",
-                          gap: 8,
-                          alignItems: "center",
                           padding: 10,
                           border: "1px solid #333",
                           borderRadius: 8,
@@ -374,11 +390,13 @@ export default function ReportsPage({ projectId }: Props) {
               </Card>
             )}
 
-            <Card type="inner" title="执行摘要">
-              {(sections?.executive_summary || selectedReport.content.highlights || []).map((item) => (
-                <p key={item} style={{ margin: "6px 0" }}>• {item}</p>
-              ))}
-            </Card>
+            {!decisionBrief && (
+              <Card type="inner" title="执行摘要">
+                {(sections?.executive_summary || selectedReport.content.highlights || []).map((item) => (
+                  <p key={item} style={{ margin: "6px 0" }}>• {item}</p>
+                ))}
+              </Card>
+            )}
 
             {(sections?.key_metrics?.length || 0) > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -423,26 +441,34 @@ export default function ReportsPage({ projectId }: Props) {
               ))}
             </Card>
 
-            <Card type="inner" title="报告原文">
-              <div style={{ fontSize: 16, lineHeight: 1.7 }}>
-                <ReactMarkdown>{selectedReport.content.markdown}</ReactMarkdown>
-              </div>
-            </Card>
-
-            {selectedReport.content.blocks.map((block) => (
-              <Card type="inner" key={block.title} title={block.title}>
-                <pre style={{ whiteSpace: "pre-wrap", background: "#111", padding: 12, borderRadius: 8 }}>{block.sql}</pre>
-                <p style={{ color: block.error ? "#ef4444" : "#aaa" }}>{block.error || block.finding}</p>
-                {block.rows?.length > 0 && (
-                  <Table
-                    size="small"
-                    pagination={false}
-                    columns={block.columns.map((col) => ({ title: col, dataIndex: col, key: col }))}
-                    dataSource={rowsToRecords(block.columns, block.rows)}
-                  />
-                )}
-              </Card>
-            ))}
+            <Collapse
+              items={[{
+                key: "audit-detail",
+                label: `审计细节（报告原文 + ${selectedReport.content.blocks.length} 个证据块）`,
+                children: (
+                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <div className="report-markdown">
+                      <ReactMarkdown>{selectedReport.content.markdown}</ReactMarkdown>
+                    </div>
+                    {selectedReport.content.blocks.map((block) => (
+                      <Card type="inner" key={block.title} title={block.title}>
+                        <pre className="report-sql">{block.sql}</pre>
+                        <p style={{ color: block.error ? "#ef4444" : "#aaa" }}>{block.error || block.finding}</p>
+                        {block.rows?.length > 0 && (
+                          <Table
+                            size="small"
+                            pagination={false}
+                            scroll={{ x: true }}
+                            columns={block.columns.map((col) => ({ title: col, dataIndex: col, key: col }))}
+                            dataSource={rowsToRecords(block.columns, block.rows)}
+                          />
+                        )}
+                      </Card>
+                    ))}
+                  </Space>
+                ),
+              }]}
+            />
           </Space>
         )}
       </Card>

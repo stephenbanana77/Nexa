@@ -19,6 +19,16 @@ interface StepState {
   result?: unknown;
 }
 
+const humanizeSkillError = (detail: unknown) => {
+  const text = typeof detail === "string" ? detail : "技能执行失败";
+  const normalized = text.toLowerCase();
+  if (normalized.includes("authentication") || normalized.includes("401") || normalized.includes("api key")) {
+    return "模型连接未通过验证。请在「高级工具 > 模型设置」中测试凭据。";
+  }
+  if (normalized.includes("timeout")) return "技能执行超时，请稍后重试。";
+  return text.replace(/\s*\(request_id:[^)]+\)/gi, "").slice(0, 220);
+};
+
 const stepLabels: Record<string, string> = {
   sql: "SQL 查询",
   chart: "生成图表",
@@ -101,9 +111,9 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
               }
             } else if (evt === "step_error") {
               setSteps((prev) => prev.map((s, i) => i === data.step - 1 ? { ...s, status: "error" as const } : s));
-              setErrorMessage(data.message || "技能步骤执行失败");
+              setErrorMessage(humanizeSkillError(data.message || "技能步骤执行失败"));
             } else if (["skill_failed", "timeout", "error"].includes(evt)) {
-              setErrorMessage(data.message || "技能执行失败");
+              setErrorMessage(humanizeSkillError(data.message || "技能执行失败"));
             }
           } catch {
             // Ignore malformed SSE fragments; the stream may split JSON across chunks.
@@ -111,7 +121,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
         }
       }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "技能执行失败，请稍后重试";
+      const detail = humanizeSkillError(error instanceof Error ? error.message : "技能执行失败，请稍后重试");
       setErrorMessage(detail);
       message.error(detail);
     } finally {
@@ -176,7 +186,7 @@ export default function SkillExecutionModal({ skill, projectId, datasets, open, 
             }))}
           />
 
-          {errorMessage && <Alert type="error" showIcon message="技能未完成" description={errorMessage} style={{ marginTop: 16 }} />}
+          {errorMessage && <Alert type="error" showIcon title="技能未完成" description={errorMessage} style={{ marginTop: 16 }} />}
 
           {output.chart && (
             <div style={{ marginTop: tokens.spacing.lg }}>

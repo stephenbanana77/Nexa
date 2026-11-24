@@ -8,11 +8,11 @@
   "author": "Nexa",
   "inputs": {"dataset": {"type": "resource", "resource_type": "dataset", "required": true}},
   "outputs": {"chart": {"type": "resource", "resource_type": "chart"}, "insight": {"type": "resource", "resource_type": "insight"}},
-  "permissions": {"read": ["schema", "data"], "write": ["chart", "insight"], "network": false, "llm": true},
+  "permissions": {"read": ["schema", "data"], "write": ["chart", "insight"], "network": false, "llm": false},
   "agent_callable": true,
   "steps": [
-    {"id": "trend_query", "type": "sql", "prompt": "如果有日期列，按月/季度聚合最重要数值指标，展示时间变化趋势。使用DATE_TRUNC做时间聚合。无日期列则输出提示。"},
+    {"id": "trend_query", "type": "sql", "prompt": "如果有日期列，按月/季度聚合最重要数值指标，展示时间变化趋势。使用DATE_TRUNC做时间聚合。无日期列则输出提示。", "strategy": "trend"},
     {"id": "trend_chart", "type": "visualize", "chart": "line", "depends_on": ["trend_query"]},
-    {"id": "trend_insight", "type": "insight", "prompt": "分析趋势：1) 整体上升/下降 2) 季节性波动 3) 异常峰值/低谷 4) 预测和建议", "depends_on": ["trend_query"]}
+    {"id": "trend_insight", "type": "insight", "prompt": "分析趋势：1) 整体上升/下降 2) 季节性波动 3) 异常峰值/低谷 4) 预测和建议", "strategy": "evidence_summary", "depends_on": ["trend_query"]}
   ]
 }

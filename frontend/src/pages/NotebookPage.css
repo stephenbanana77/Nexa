@@ -1,0 +1,40 @@
+.notebook-page {
+  padding: 12px 0;
+}
+
+.notebook-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.notebook-dataset-picker {
+  min-width: 260px;
+}
+
+.notebook-sample-note {
+  margin-bottom: 12px;
+}
+
+.notebook-result-meta {
+  margin-bottom: 6px;
+  color: #8c948c;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .notebook-dataset-picker {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .notebook-toolbar > .ant-btn:last-child {
+    margin-left: 0 !important;
+  }
+
+  .notebook-page textarea {
+    min-height: 150px;
+    font-size: 14px !important;
+  }
+}

@@ -1,5 +1,6 @@
 """Skill manifest validation tests."""
 import json
+from pathlib import Path
 
 from skills import skill_registry
 from skills.builtin import register_builtin_skills
@@ -144,3 +145,38 @@ def test_builtin_catalog_only_exposes_executable_permissioned_skills():
     assert "schema_inspector" not in skills
     assert skills["data_summary"]["definition"]["steps"]
     assert skills["data_summary"]["permissions"]["read"] == ["schema", "data"]
+
+
+def test_builtin_data_summary_runs_without_model_access(client, project_id, auth_headers, monkeypatch):
+    csv_path = Path("backend/test_storage/skill_fixture.csv")
+    csv_path.parent.mkdir(exist_ok=True)
+    csv_path.write_text(
+        "Country,Quantity,UnitPrice,InvoiceDate\n"
+        "UK,2,10.5,2026-01-01\n"
+        "FR,3,12.0,2026-02-01\n",
+        encoding="utf-8",
+    )
+    with csv_path.open("rb") as handle:
+        upload = client.post(
+            f"/api/datasets/upload?project_id={project_id}",
+            files={"file": ("skill_fixture.csv", handle, "text/csv")},
+            headers=auth_headers,
+        )
+    assert upload.status_code == 200, upload.text
+
+    async def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("built-in deterministic skills must not call the model")
+
+    monkeypatch.setattr("skills.executor.achat", fail_if_called)
+    response = client.post(
+        "/api/skills/data_summary/execute",
+        json={"project_id": project_id, "dataset_id": upload.json()["id"], "params": {}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert '"event": "skill_done"' in response.text
+    assert "row_count" in response.text
+    persisted = next(item for item in skill_registry.list_all() if item["name"] == "data_summary")
+    resolved = skill_registry.get(persisted["id"])
+    assert resolved["definition"]["steps"][0]["strategy"] == "data_summary"

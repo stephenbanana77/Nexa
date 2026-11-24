@@ -4,6 +4,7 @@ import { Button, Card, Tag, Modal, Input, Spin, Empty, message, Steps } from "an
 import { PlusOutlined, PlayCircleOutlined, EditOutlined, DeleteOutlined, ClockCircleOutlined, FileDoneOutlined } from "@ant-design/icons";
 import { api } from "../services";
 import { tokens } from "../theme";
+import "./WorkflowPage.css";
 
 interface WorkflowItem {
   id: string;
@@ -167,8 +168,8 @@ export default function WorkflowPage() {
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}><Spin /></div>;
 
   return (
-    <div style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="workflow-page" style={{ padding: `${tokens.spacing.xxl}px 0`, width: "100%" }}>
+      <div className="workflow-header">
         <div>
           <h2 style={{ color: tokens.color.text.primary, margin: 0, fontSize: tokens.fontSize.xl }}>自动化</h2>
           <p style={{ color: tokens.color.text.muted, fontSize: tokens.fontSize.base, margin: "4px 0 0" }}>
@@ -193,7 +194,7 @@ export default function WorkflowPage() {
                 border: `0.5px solid ${tokens.color.border.default}`, marginBottom: 8,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="workflow-item-row">
                 <div style={{ flex: 1 }}>
                   <div style={{ color: tokens.color.text.primary, fontWeight: 500 }}>{wf.name}</div>
                   <div style={{ fontSize: tokens.fontSize.xs, color: tokens.color.text.muted, display: "flex", gap: 12, flexWrap: "wrap", marginTop: 3 }}>

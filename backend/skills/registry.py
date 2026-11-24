@@ -70,6 +70,12 @@ class SkillRegistry:
                 (Skill.name == name_or_id) | (Skill.id == name_or_id)
             ).first()
             if skill:
+                if skill.name in self._runtime_skills:
+                    return {
+                        "name": skill.name,
+                        **self._runtime_skills[skill.name],
+                        "id": skill.id,
+                    }
                 return {
                     "id": skill.id,
                     "name": skill.name,

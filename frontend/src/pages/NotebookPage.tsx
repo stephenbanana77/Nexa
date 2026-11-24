@@ -4,6 +4,7 @@ import { Alert, Button, Popconfirm, Select, message } from "antd";
 import { PlusOutlined, CaretRightOutlined, DeleteOutlined, BranchesOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import api from "../api/client";
+import "./NotebookPage.css";
 
 interface Cell {
   id: string;
@@ -121,12 +122,12 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div style={{ padding: "12px 0" }}>
-      <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+    <div className="notebook-page">
+      <div className="notebook-toolbar">
         <Select
           value={datasetId}
           placeholder="选择分析数据集"
-          style={{ minWidth: 260 }}
+          className="notebook-dataset-picker"
           options={datasets.map((dataset) => ({ value: dataset.id, label: `${dataset.name}（${dataset.row_count.toLocaleString()} 行）` }))}
           onChange={async (value) => {
             setDatasetId(value);
@@ -173,6 +174,15 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
           >保存为工作流</Button>
         )}
       </div>
+
+      {datasetId && cells.some((cell) => cell.cell_type === "python") && (
+        <Alert
+          type="info"
+          showIcon
+          title="Python 单元格使用数据集前 1,000 行样本；SQL 单元格使用全量数据。"
+          className="notebook-sample-note"
+        />
+      )}
 
       {!datasetId && (
         <Alert
@@ -311,6 +321,9 @@ export default function NotebookPage({ projectId }: { projectId: string }) {
             {/* Python Results */}
             {pythonResults[cell.id] && (
               <div style={{ marginTop: 8 }}>
+                <div className="notebook-result-meta">
+                  本次基于前 {pythonResults[cell.id].sample_rows?.toLocaleString?.() || pythonResults[cell.id].sample_rows || 0} 行样本
+                </div>
                 <pre style={{
                   background: "#0d0d0d",
                   padding: 10,

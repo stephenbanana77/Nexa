@@ -3,6 +3,7 @@ import os
 import sys
 import pytest
 from fastapi.testclient import TestClient
+from sse_starlette.sse import AppStatus
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DB_PATH = os.path.join(BACKEND_DIR, "test.db")
@@ -24,8 +25,14 @@ from database.session import SessionLocal
 @pytest.fixture(autouse=True)
 def setup_db():
     """Create tables before each test, drop after."""
+    # sse-starlette keeps this event globally, but each TestClient owns a new
+    # event loop. Reusing it across tests binds later streams to a closed loop.
+    AppStatus.should_exit = False
+    AppStatus.should_exit_event = None
     Base.metadata.create_all(bind=engine)
     yield
+    AppStatus.should_exit = False
+    AppStatus.should_exit_event = None
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
     # Clean up test files — ignore errors (sandbox may prevent deletion)

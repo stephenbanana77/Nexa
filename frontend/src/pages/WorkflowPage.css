@@ -1,0 +1,34 @@
+.workflow-header,
+.workflow-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workflow-header {
+  justify-content: space-between;
+}
+
+@media (max-width: 640px) {
+  .workflow-page {
+    padding-top: 18px !important;
+  }
+
+  .workflow-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-header > .ant-btn {
+    width: 100%;
+  }
+
+  .workflow-item-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .workflow-item-row > :first-child {
+    flex-basis: 100%;
+  }
+}

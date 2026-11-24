@@ -1,5 +1,6 @@
 """Skill step executor — runs individual steps of a Skill."""
 import asyncio
+import re
 from typing import Any, AsyncGenerator
 from agents.llm import achat
 from agents.tools import execute_query, suggest_chart
@@ -25,6 +26,7 @@ async def execute_skill(
         yield {"event": "skill_failed", "message": "Skill has no executable steps"}
         return
     dataset_id = params.get("dataset_id")
+    dataset_schema: list[dict[str, Any]] = []
     if dataset_id:
         db = SessionLocal()
         try:
@@ -34,6 +36,7 @@ async def execute_skill(
             ).first()
             if not dataset:
                 raise ValueError("Dataset is not available in this project")
+            dataset_schema = list(dataset.schema_info or [])
             load_dataset(
                 project_id,
                 dataset.file_path,
@@ -49,6 +52,7 @@ async def execute_skill(
         "schema": schema,
         "project_id": project_id,
         "params": params,
+        "dataset_schema": dataset_schema,
         "previous_results": [],
     }
 
@@ -109,11 +113,14 @@ async def execute_skill(
 
 
 async def _execute_sql_step(step: dict, context: dict) -> dict:
-    """Execute a SQL step: LLM generates SQL → execute → return results."""
+    """Execute deterministic built-in SQL or generate SQL for custom skills."""
     prompt_template = step.get("prompt", "SELECT * FROM data LIMIT 10")
     schema = context["schema"]
+    strategy = step.get("strategy")
+    sql = _deterministic_sql(strategy, context.get("dataset_schema") or []) if strategy else None
 
-    full_prompt = f"""You are a data analyst. Given the dataset schema, write a SQL query.
+    if not sql:
+        full_prompt = f"""You are a data analyst. Given the dataset schema, write a SQL query.
 
 Schema:
 {schema}
@@ -121,13 +128,9 @@ Schema:
 Task: {prompt_template}
 
 Respond with ONLY the SQL query in a markdown code block. No explanation."""
-
-    response = await achat([{"role": "user", "content": full_prompt}])
-
-    # Extract SQL
-    import re
-    sql_match = re.search(r"```sql\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
-    sql = sql_match.group(1).strip() if sql_match else response.strip()
+        response = await achat([{"role": "user", "content": full_prompt}])
+        sql_match = re.search(r"```sql\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
+        sql = sql_match.group(1).strip() if sql_match else response.strip()
     dataset_id = context.get("params", {}).get("dataset_id")
     if dataset_id:
         sql = bind_default_table(sql, dataset_id)
@@ -157,6 +160,9 @@ async def _execute_visualize_step(step: dict, previous_result: dict) -> dict | N
 
 async def _execute_insight_step(step: dict, previous_results: list, context: dict) -> str:
     """Generate AI insight from accumulated results."""
+    if step.get("strategy") == "evidence_summary":
+        return _deterministic_insight(previous_results)
+
     prompt_template = step.get("prompt", "Summarize the results.")
     schema = context["schema"]
 
@@ -183,3 +189,145 @@ Task: {prompt_template}
 Respond in Markdown format with a clear structure."""
 
     return await achat([{"role": "user", "content": full_prompt}])
+
+
+def _quote(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _is_numeric(dtype: str) -> bool:
+    return any(token in dtype.lower() for token in ("int", "float", "double", "decimal", "number"))
+
+
+def _is_temporal(name: str, dtype: str) -> bool:
+    lowered = f"{name} {dtype}".lower()
+    return any(token in lowered for token in ("date", "time", "timestamp", "month", "quarter", "year"))
+
+
+def _is_technical(name: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    tokens = set(normalized.split("_"))
+    return bool(tokens.intersection({"id", "code", "key", "index", "row", "zip", "postal"})) or normalized.endswith(("id", "code"))
+
+
+def _find_column(schema: list[dict[str, Any]], candidates: tuple[str, ...]) -> str | None:
+    for column in schema:
+        name = str(column.get("name") or "")
+        normalized = re.sub(r"[^a-z0-9]+", "", name.lower())
+        if any(candidate in normalized for candidate in candidates):
+            return name
+    return None
+
+
+def _numeric_columns(schema: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(column.get("name"))
+        for column in schema
+        if _is_numeric(str(column.get("type") or "")) and not _is_technical(str(column.get("name") or ""))
+    ]
+
+
+def _business_dimension(schema: list[dict[str, Any]]) -> str | None:
+    priority = ("country", "region", "segment", "category", "state", "city", "channel", "brand")
+    candidates = [
+        str(column.get("name"))
+        for column in schema
+        if not _is_numeric(str(column.get("type") or ""))
+        and not _is_temporal(str(column.get("name") or ""), str(column.get("type") or ""))
+        and not _is_technical(str(column.get("name") or ""))
+        and not any(token in str(column.get("name") or "").lower() for token in ("description", "comment", "note"))
+    ]
+    return next((name for token in priority for name in candidates if token in name.lower()), candidates[0] if candidates else None)
+
+
+def _measure_expression(schema: list[dict[str, Any]]) -> tuple[str, str] | None:
+    quantity = _find_column(schema, ("quantity", "qty", "units"))
+    price = _find_column(schema, ("unitprice", "price"))
+    if quantity and price:
+        return "net_sales", f"SUM({_quote(quantity)} * {_quote(price)})"
+
+    numeric = _numeric_columns(schema)
+    if not numeric:
+        return None
+    priority = ("sales", "revenue", "amount", "profit", "quantity", "qty", "units", "orders", "volume")
+    selected = next((name for token in priority for name in numeric if token in name.lower()), numeric[0])
+    return selected, f"SUM({_quote(selected)})"
+
+
+def _summary_sql(schema: list[dict[str, Any]]) -> str:
+    expressions = ["COUNT(*) AS row_count", f"{len(schema)} AS column_count"]
+    for column in schema[:6]:
+        name = str(column.get("name") or "")
+        alias = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "column"
+        expressions.append(
+            f"ROUND(SUM(CASE WHEN {_quote(name)} IS NULL THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS {alias}_missing_pct"
+        )
+    for name in _numeric_columns(schema)[:2]:
+        alias = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        expressions.extend([
+            f"MIN({_quote(name)}) AS {alias}_min",
+            f"MAX({_quote(name)}) AS {alias}_max",
+            f"ROUND(AVG({_quote(name)}), 2) AS {alias}_avg",
+        ])
+    return "SELECT " + ", ".join(expressions) + " FROM data"
+
+
+def _deterministic_sql(strategy: str | None, schema: list[dict[str, Any]]) -> str | None:
+    if not strategy:
+        return None
+    if strategy == "data_summary":
+        return _summary_sql(schema)
+
+    if strategy == "correlation":
+        numeric = _numeric_columns(schema)[:5]
+        pairs = [(numeric[i], numeric[j]) for i in range(len(numeric)) for j in range(i + 1, len(numeric))]
+        if not pairs:
+            return _summary_sql(schema)
+        queries = [
+            (
+                f"SELECT '{left.replace(chr(39), chr(39) * 2)}' AS field_a, "
+                f"'{right.replace(chr(39), chr(39) * 2)}' AS field_b, "
+                f"ROUND(CORR(CAST({_quote(left)} AS DOUBLE), CAST({_quote(right)} AS DOUBLE)), 4) AS correlation FROM data"
+            )
+            for left, right in pairs
+        ]
+        return "SELECT * FROM (" + " UNION ALL ".join(queries) + ") pairs ORDER BY ABS(correlation) DESC LIMIT 10"
+
+    measure = _measure_expression(schema)
+    dimension = _business_dimension(schema)
+    if strategy == "ranking" and measure and dimension:
+        label, expression = measure
+        return (
+            f"WITH ranked AS (SELECT {_quote(dimension)} AS dimension, ROUND({expression}, 2) AS {label} "
+            f"FROM data GROUP BY {_quote(dimension)}) "
+            "SELECT * FROM ((SELECT 'top' AS rank_group, * FROM ranked ORDER BY " + label + " DESC LIMIT 10) "
+            "UNION ALL (SELECT 'bottom' AS rank_group, * FROM ranked ORDER BY " + label + " ASC LIMIT 10)) combined"
+        )
+
+    if strategy == "trend" and measure:
+        temporal = next((
+            str(column.get("name")) for column in schema
+            if _is_temporal(str(column.get("name") or ""), str(column.get("type") or ""))
+        ), None)
+        if temporal:
+            label, expression = measure
+            return (
+                f"SELECT DATE_TRUNC('month', {_quote(temporal)}) AS month, ROUND({expression}, 2) AS {label} "
+                f"FROM data GROUP BY month ORDER BY month"
+            )
+
+    return _summary_sql(schema)
+
+
+def _deterministic_insight(previous_results: list[Any]) -> str:
+    result = next((item for item in previous_results if isinstance(item, dict) and "rows" in item), None)
+    if not result:
+        return "### 结果摘要\n\n本次规则分析没有返回可展示的数据。"
+    columns = result.get("columns") or []
+    rows = result.get("rows") or []
+    lines = ["### 结果摘要", "", f"- 查询返回 {result.get('row_count', len(rows))} 行结果。"]
+    if rows:
+        preview = "；".join(f"{column}：{rows[0][index]}" for index, column in enumerate(columns[:5]))
+        lines.append(f"- 首行结果：{preview}。")
+    lines.append("- 以上结论来自确定性 SQL，仅描述数据现象，不推断因果关系。")
+    return "\n".join(lines)

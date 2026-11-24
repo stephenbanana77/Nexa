@@ -34,5 +34,5 @@ def test_superstore_demo_report_contains_investigation_artifacts(client, auth_he
     assert "Total Row ID" not in metric_names
     assert "Total Postal Code" not in metric_names
     block_titles = {block["title"] for block in report["content"]["blocks"]}
-    assert "排名靠前：按 Sales 查看 Region" in block_titles
+    assert "排名靠前：按 Total Sales 查看 Region" in block_titles
     assert "Top Order Date by Sales" not in block_titles

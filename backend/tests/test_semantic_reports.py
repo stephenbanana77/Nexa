@@ -1,4 +1,5 @@
 """Semantic layer and Insight Report tests."""
+import json
 from pathlib import Path
 
 from database.session import SessionLocal
@@ -140,6 +141,55 @@ def test_auto_investigation_creates_actionable_cards(client, project_id, auth_he
     assert all(card["hypotheses"] for card in cards)
     assert all(hypothesis["validation"] for card in cards for hypothesis in card["hypotheses"])
     assert any(card["sql"] for card in cards)
+
+
+def test_retail_schema_suggests_revenue_and_report_uses_it_without_profit_claims(client, project_id, auth_headers):
+    csv_path = Path("backend/test_storage/retail_fixture.csv")
+    csv_path.parent.mkdir(exist_ok=True)
+    csv_path.write_text(
+        "InvoiceNo,StockCode,Description,Quantity,InvoiceDate,UnitPrice,CustomerID,Country\n"
+        "10001,A1,Widget,2,2026-01-01,10.5,7,United Kingdom\n"
+        "10002,A2,Gadget,-1,2026-01-02,5.0,8,France\n",
+        encoding="utf-8",
+    )
+    with csv_path.open("rb") as handle:
+        upload = client.post(
+            f"/api/datasets/upload?project_id={project_id}",
+            files={"file": ("retail_fixture.csv", handle, "text/csv")},
+            headers=auth_headers,
+        )
+    assert upload.status_code == 200, upload.text
+    dataset_id = upload.json()["id"]
+
+    layer = client.get(f"/api/semantic/{project_id}", headers=auth_headers).json()
+    revenue = next(item for item in layer["metrics"] if item["dataset_id"] == dataset_id and item["name"] == "销售额")
+    assert revenue["expression"] == 'SUM("Quantity" * "UnitPrice")'
+    suggested_dimensions = {
+        item["name"] for item in layer["dimensions"] if item["dataset_id"] == dataset_id
+    }
+    assert "Country" in suggested_dimensions
+    assert not {"InvoiceNo", "StockCode", "Description", "UnitPrice", "CustomerID"}.intersection(suggested_dimensions)
+
+    country = next(item for item in layer["dimensions"] if item["dataset_id"] == dataset_id and item["name"] == "Country")
+    assert client.patch(
+        f"/api/semantic/metrics/{revenue['id']}/status",
+        json={"status": "approved"}, headers=auth_headers,
+    ).status_code == 200
+    assert client.patch(
+        f"/api/semantic/dimensions/{country['id']}/status",
+        json={"status": "approved"}, headers=auth_headers,
+    ).status_code == 200
+
+    report_response = client.post(
+        "/api/reports/investigate",
+        json={"project_id": project_id, "dataset_id": dataset_id},
+        headers=auth_headers,
+    )
+    assert report_response.status_code == 201, report_response.text
+    report = report_response.json()
+    total_block = next(block for block in report["content"]["blocks"] if block["title"] == "总计：销售额")
+    assert '"Quantity" * "UnitPrice"' in total_block["sql"]
+    assert "利润" not in json.dumps(report["content"], ensure_ascii=False)
 
 
 def test_analysis_memory_context_includes_recent_report(client, project_id, auth_headers):

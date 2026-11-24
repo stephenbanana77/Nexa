@@ -30,14 +30,15 @@
     "read": ["schema", "data"],
     "write": ["insight", "chart"],
     "network": false,
-    "llm": true
+    "llm": false
   },
   "agent_callable": true,
   "steps": [
     {
       "id": "generate_stats",
       "type": "sql",
-      "prompt": "生成数据集整体统计信息：总行数、每列数据类型、缺失值数量和比例。数值列计算最小值、最大值、平均值和中位数。"
+      "prompt": "生成数据集整体统计信息：总行数、每列数据类型、缺失值数量和比例。数值列计算最小值、最大值、平均值和中位数。",
+      "strategy": "data_summary"
     },
     {
       "id": "overview_chart",
@@ -49,6 +50,7 @@
       "id": "summary_insight",
       "type": "insight",
       "prompt": "总结数据概览：1) 数据集整体规模 2) 哪些列有较多缺失值 3) 数值列的分布特点 4) 建议下一步分析方向",
+      "strategy": "evidence_summary",
       "depends_on": ["generate_stats", "overview_chart"]
     }
   ]
